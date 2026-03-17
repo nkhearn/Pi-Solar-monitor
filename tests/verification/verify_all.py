@@ -13,7 +13,7 @@ def capture_dashboard(page: Page):
     time.sleep(2)
 
     # Take screenshot of the dashboard
-    page.screenshot(path="/home/jules/verification/dashboard.png", full_page=True)
+    page.screenshot(path="screenshots/dashboard.png", full_page=True)
     print("Dashboard screenshot saved.")
 
 def capture_api_responses(page: Page):
@@ -21,18 +21,18 @@ def capture_api_responses(page: Page):
     page.goto("http://localhost:8000/api/last")
     pre = page.locator("pre")
     content = pre.inner_text()
-    with open("/home/jules/verification/api_last.json", "w") as f:
+    with open("screenshots/api_last.json", "w") as f:
         f.write(content)
-    page.screenshot(path="/home/jules/verification/api_last.png")
+    page.screenshot(path="screenshots/api_last.png")
     print("API /api/last captured.")
 
     # Capture /api/history
     page.goto("http://localhost:8000/api/history?limit=5")
     pre = page.locator("pre")
     content = pre.inner_text()
-    with open("/home/jules/verification/api_history.json", "w") as f:
+    with open("screenshots/api_history.json", "w") as f:
         f.write(content)
-    page.screenshot(path="/home/jules/verification/api_history.png")
+    page.screenshot(path="screenshots/api_history.png")
     print("API /api/history captured.")
 
 if __name__ == "__main__":
