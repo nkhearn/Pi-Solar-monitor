@@ -10,10 +10,9 @@ from datetime import datetime
 
 # ================= CONFIGURATION =================
 EMONCMS_URL = "http://127.0.0.1"  # No trailing slash
-WRITE_API_KEY = "c304a3fb502903718d3da4e69d76b4b8"
+WRITE_API_KEY = "API_KEY"
 NODE_NAME = "Inverter"
 MACRODROID_URL = "https://trigger.macrodroid.com/UUID/power"
-PYTHONANYWHERE_URL = "https://nhearn.eu.pythonanywhere.com/store/"
 
 # Path for DS18B20 1-wire sensors
 W1_DEVICE_PATH = "/sys/bus/w1/devices/"
@@ -187,30 +186,12 @@ async def send_to_macrodroid(payload_dict):
         print(f"Macrodroid Connection Error: {e}")
 
 
-async def send_to_pythonanywhere(payload_dict):
-    """
-    Asynchronously sends data to PythonAnywhere.
-    """
-    headers = {'Content-Type': 'application/json'}
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(PYTHONANYWHERE_URL, json=payload_dict, headers=headers) as response:
-                if response.status == 200:
-                    print("PythonAnywhere Upload Successful")
-                else:
-                    text = await response.text()
-                    print(f"PythonAnywhere Error: {response.status} - {text}")
-    except Exception as e:
-        print(f"PythonAnywhere Connection Error: {e}")
-
-
 async def broadcast_async_data(payload):
     """
     Orchestrates concurrent asynchronous uploads.
     """
     await asyncio.gather(
-        send_to_macrodroid(payload),
-        send_to_pythonanywhere(payload)
+        send_to_macrodroid(payload)
     )
 
 
@@ -238,7 +219,7 @@ def main():
         # Send to EmonCMS (Synchronous)
         send_to_emoncms(final_payload)
         
-        # Send to Async Services (Macrodroid, PythonAnywhere)
+        # Send to Async Services (Macrodroid)
         try:
             asyncio.run(broadcast_async_data(final_payload))
         except Exception as e:
