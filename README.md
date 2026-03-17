@@ -134,8 +134,27 @@ The system provides a FastAPI-based web server.
 
 ### REST API
 
-- **GET `/api/last`**: Returns the most recent data point.
+- **GET `/api/last`**: Returns the most recent data point (full JSON).
 - **GET `/api/history?limit=100`**: Returns the last `N` data points. Optional query parameters `start` and `end` (ISO timestamps) can be used to filter results.
+- **GET `/api/keys`**: Returns a list of all available data keys found in recent records.
+- **GET `/api/data/{key}/last`**: Returns the most recent value for a specific key.
+- **GET `/api/data/{key}/history`**: Returns historical values for a key in a compact format: `[[timestamp, value], ...]`.
+- **GET `/api/data/{key}/stats`**: Returns aggregate statistics (`avg`, `min`, `max`, `sum`, `count`) for a key.
+
+#### Advanced Query Parameters
+
+For `/api/data/{key}/history` and `/api/data/{key}/stats`:
+
+- **Time Filtering**:
+    - `start`, `end`: Can be an ISO timestamp (`2023-10-27 10:00:00`) or a relative time string:
+        - `today`: Since 00:00 of the current day.
+        - `10s`, `5m`, `1h`, `7d`: Last X seconds, minutes, hours, or days.
+- **Value Filtering**:
+    - `gt`: Greater than.
+    - `lt`: Less than.
+    - `eq`: Equal to.
+- **Limit**:
+    - `limit`: (For history only) Max number of records to return (default 100).
 
 ### WebSocket API
 
