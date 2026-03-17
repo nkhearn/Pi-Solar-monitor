@@ -13,6 +13,8 @@ The system periodically polls various data sources via custom "collectors", stor
 - **Macrodroid Integration**: Automatically trigger Macrodroid webhooks with collected data for automation.
 - **Lightweight**: Optimized for low-power hardware like the Pi Zero 2 W.
 
+![Project Carousel](screenshots/slide.gif)
+
 ## Hardware Setup
 
 ### Enabling 1-Wire (Required for temperature sensors)
