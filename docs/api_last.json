@@ -1,0 +1,7 @@
+{
+    "timestamp": "2026-03-17 15:44:01.031",
+    "data": {
+        "inverter_error": "[Errno 2] No such file or directory: '/home/pi/.local/bin/mpp-solar'",
+        "solar_prediction": 1523.08
+    }
+}
