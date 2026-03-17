@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --container-bg: #ffffff;
+            --text-color: #333333;
+            --header-text: #2c3e50;
+            --card-shadow: rgba(0,0,0,0.1);
+            --card-title: #666666;
+            --accent-color: #3498db;
+            --border-color: #dddddd;
+            --modal-bg: rgba(0,0,0,0.5);
+            --gauge-bg: #ecf0f1;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #1a1a1a;
+            --container-bg: #2d2d2d;
+            --text-color: #e0e0e0;
+            --header-text: #ffffff;
+            --card-shadow: rgba(0,0,0,0.3);
+            --card-title: #aaaaaa;
+            --accent-color: #3498db;
+            --border-color: #444444;
+            --modal-bg: rgba(255,255,255,0.1);
+            --gauge-bg: #444444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        h1 { margin: 0; color: var(--header-text); }
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .status {
+            font-size: 0.9em;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+
+        .btn {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--container-bg);
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 0.9em;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn:hover {
+            background: var(--border-color);
+        }
+        .btn.active {
+            background-color: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+        }
+        .btn-danger {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            font-size: 0.8em;
+        }
+        .btn-small {
+            padding: 4px 8px;
+            font-size: 0.8em;
+        }
+
+        .section-title {
+            margin: 20px 0 10px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid var(--accent-color);
+            font-size: 1.2em;
+            color: var(--header-text);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: var(--container-bg);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px var(--card-shadow);
+            border: 1px solid var(--border-color);
+        }
+        .card h3 {
+            margin-top: 0;
+            font-size: 0.8em;
+            color: var(--card-title);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .card .value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: var(--header-text);
+            word-break: break-all;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .chart-container {
+            background: var(--container-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px var(--card-shadow);
+            border: 1px solid var(--border-color);
+            min-height: 250px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .chart-title {
+            font-weight: bold;
+            color: var(--header-text);
+        }
+        .chart-actions {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        .chart-body {
+            flex-grow: 1;
+            position: relative;
+        }
+
+        .gauge-value {
+            position: absolute;
+            bottom: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2em;
+            font-weight: bold;
+            color: var(--header-text);
+        }
+
+        /* Modal */
+        .modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--modal-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: var(--container-bg);
+            padding: 20px;
+            border-radius: 8px;
+            width: 400px;
+            max-width: 90%;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .modal-header {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+        .form-group select, .form-group input {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+            color: var(--text-color);
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Solar Monitor</h1>
+            <div class="controls">
+                <button id="themeToggle" class="btn">🌙 Dark Mode</button>
+                <div id="status" class="status disconnected">Connecting...</div>
+            </div>
+        </header>
+
+        <div id="metrics-sections">
+            <div id="section-solar" class="hidden">
+                <div class="section-title">Solar</div>
+                <div class="grid" id="metrics-solar"></div>
+            </div>
+            <div id="section-battery" class="hidden">
+                <div class="section-title">Battery</div>
+                <div class="grid" id="metrics-battery"></div>
+            </div>
+            <div id="section-temp" class="hidden">
+                <div class="section-title">Temperature</div>
+                <div class="grid" id="metrics-temp"></div>
+            </div>
+            <div id="section-other" class="hidden">
+                <div class="section-title">Other</div>
+                <div class="grid" id="metrics-other"></div>
+            </div>
+        </div>
+
+        <div class="section-title">
+            Charts
+            <button id="addChartBtn" class="btn btn-primary">➕ Add Chart</button>
+        </div>
+        <div class="chart-grid" id="charts-container">
+            <!-- Charts injected here -->
+        </div>
+    </div>
+
+    <!-- Add Chart Modal -->
+    <div id="addChartModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">Add New Chart</div>
+            <div class="form-group">
+                <label>Title</label>
+                <input type="text" id="chartTitle" placeholder="My Chart">
+            </div>
+            <div class="form-group">
+                <label>Metric</label>
+                <select id="chartMetric"></select>
+            </div>
+            <div class="form-group">
+                <label>Chart Type</label>
+                <select id="chartType">
+                    <option value="line">Line Chart</option>
+                    <option value="gauge">Gauge (Latest Value)</option>
+                </select>
+            </div>
+            <div class="form-group" id="maxValGroup">
+                <label>Max Value (for Gauge)</label>
+                <input type="number" id="chartMax" value="1000">
+            </div>
+            <div class="modal-actions">
+                <button id="cancelChartBtn" class="btn">Cancel</button>
+                <button id="saveChartBtn" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const themeToggle = document.getElementById('themeToggle');
+        const chartsContainer = document.getElementById('charts-container');
+        const addChartModal = document.getElementById('addChartModal');
+        const chartMetricSelect = document.getElementById('chartMetric');
+        const chartTypeSelect = document.getElementById('chartType');
+        const maxValGroup = document.getElementById('maxValGroup');
+
+        const COLORS = [
+            '#3498db', '#e67e22', '#2ecc71', '#9b59b6', '#f1c40f',
+            '#e74c3c', '#1abc9c', '#34495e', '#d35400', '#27ae60'
+        ];
+
+        let charts = [];
+        let availableMetrics = [];
+        let lastData = null;
+
+        chartTypeSelect.onchange = () => {
+            maxValGroup.classList.toggle('hidden', chartTypeSelect.value !== 'gauge');
+        };
+
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            themeToggle.textContent = theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+            updateChartTheme();
+        }
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+        });
+
+        const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        setTheme(savedTheme);
+
+        function updateChartTheme() {
+            const color = getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim();
+            const gaugeBg = getComputedStyle(document.documentElement).getPropertyValue('--gauge-bg').trim();
+
+            charts.forEach(c => {
+                if (c.instance) {
+                    if (c.type === 'line') {
+                        c.instance.options.scales.y.ticks.color = color;
+                        c.instance.options.scales.x.ticks.color = color;
+                        c.instance.options.plugins.legend.labels.color = color;
+                    } else if (c.type === 'gauge') {
+                        c.instance.data.datasets[0].backgroundColor[1] = gaugeBg;
+                    }
+                    c.instance.update();
+                }
+            });
+        }
+
+        function updateStatus(connected) {
+            statusEl.textContent = connected ? 'Live' : 'Disconnected';
+            statusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
+        }
+
+        function getCategory(key) {
+            key = key.toLowerCase();
+            if (key.includes('solar') || key.includes('pv')) return 'solar';
+            if (key.includes('battery') || key.includes('bus')) return 'battery';
+            if (key.includes('temp') || key.includes('water') || key.includes('inlet') || key.includes('outlet')) return 'temp';
+            return 'other';
+        }
+
+        function renderMetrics(data) {
+            lastData = data;
+            const categories = {
+                solar: document.getElementById('metrics-solar'),
+                battery: document.getElementById('metrics-battery'),
+                temp: document.getElementById('metrics-temp'),
+                other: document.getElementById('metrics-other')
+            };
+
+            Object.values(categories).forEach(el => el.innerHTML = '');
+            const seenCategories = new Set();
+            const metrics = Object.keys(data).filter(k => typeof data[k] === 'number');
+
+            if (metrics.length !== availableMetrics.length) {
+                availableMetrics = metrics;
+                updateMetricSelect();
+            }
+
+            for (const key of Object.keys(data)) {
+                if (typeof data[key] === 'object' && data[key] !== null) continue;
+
+                const category = getCategory(key);
+                seenCategories.add(category);
+
+                const card = document.createElement('div');
+                card.className = 'card';
+
+                const title = document.createElement('h3');
+                title.textContent = key.replace(/_/g, ' ');
+
+                const valueDiv = document.createElement('div');
+                valueDiv.className = 'value';
+                valueDiv.textContent = data[key];
+
+                const unit = document.createElement('span');
+                unit.className = 'unit';
+                valueDiv.appendChild(unit);
+
+                card.appendChild(title);
+                card.appendChild(valueDiv);
+
+                categories[category].appendChild(card);
+            }
+
+            Object.keys(categories).forEach(cat => {
+                const section = document.getElementById(`section-${cat}`);
+                if (seenCategories.has(cat)) section.classList.remove('hidden');
+                else section.classList.add('hidden');
+            });
+
+            charts.forEach(c => {
+                if (c.type === 'gauge' && c.instance) {
+                    const val = data[c.metric];
+                    if (val !== undefined) {
+                        const max = c.max || 1000;
+                        c.instance.data.datasets[0].data = [val, Math.max(0, max - val)];
+                        const valEl = document.querySelector(`#chart-wrapper-${c.id} .gauge-value`);
+                        if (valEl) valEl.textContent = val;
+                        c.instance.update('none');
+                    }
+                }
+            });
+        }
+
+        function updateMetricSelect() {
+            chartMetricSelect.innerHTML = '';
+            availableMetrics.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                chartMetricSelect.appendChild(opt);
+            });
+        }
+
+        function saveCharts() {
+            const config = charts.map(c => ({ id: c.id, title: c.title, type: c.type, metric: c.metric, max: c.max, range: c.range }));
+            localStorage.setItem('dashboard_charts', JSON.stringify(config));
+        }
+
+        async function fetchHistory(metric, range) {
+            let limit = 60;
+            if (range === '24h') limit = 1440;
+            if (range === '7d') limit = 10080;
+
+            const response = await fetch(`/api/history?limit=${limit}`);
+            const data = await response.json();
+            return data.reverse();
+        }
+
+        async function updateChartRange(chartId, range) {
+            const chartConfig = charts.find(c => c.id === chartId);
+            if (!chartConfig || chartConfig.type !== 'line') return;
+
+            chartConfig.range = range;
+            saveCharts();
+
+            const buttons = document.querySelectorAll(`#chart-wrapper-${chartId} .range-btn`);
+            buttons.forEach(btn => btn.classList.toggle('active', btn.dataset.range === range));
+
+            const data = await fetchHistory(chartConfig.metric, range);
+            if (chartConfig.instance) {
+                chartConfig.instance.data.labels = data.map(d => {
+                    const ts = d.timestamp.split(' ')[1].split(':');
+                    return range === '1h' ? `${ts[0]}:${ts[1]}:${ts[2].split('.')[0]}` : `${ts[0]}:${ts[1]}`;
+                });
+                chartConfig.instance.data.datasets[0].data = data.map(d => d.data[chartConfig.metric]);
+                chartConfig.instance.update();
+            }
+        }
+
+        function createChartUI(chartConfig) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'chart-container';
+            wrapper.id = `chart-wrapper-${chartConfig.id}`;
+
+            const header = document.createElement('div');
+            header.className = 'chart-header';
+
+            const title = document.createElement('div');
+            title.className = 'chart-title';
+            title.textContent = chartConfig.title;
+            header.appendChild(title);
+
+            const actions = document.createElement('div');
+            actions.className = 'chart-actions';
+
+            if (chartConfig.type === 'line') {
+                ['1h', '24h', '7d'].forEach(r => {
+                    const btn = document.createElement('button');
+                    btn.className = `btn btn-small range-btn ${chartConfig.range === r ? 'active' : ''}`;
+                    btn.dataset.range = r;
+                    btn.textContent = r;
+                    btn.onclick = () => updateChartRange(chartConfig.id, r);
+                    actions.appendChild(btn);
+                });
+            }
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'btn btn-danger btn-small';
+            removeBtn.textContent = 'Remove';
+            removeBtn.onclick = () => removeChart(chartConfig.id);
+            actions.appendChild(removeBtn);
+
+            header.appendChild(actions);
+            wrapper.appendChild(header);
+
+            const body = document.createElement('div');
+            body.className = 'chart-body';
+
+            const canvas = document.createElement('canvas');
+            canvas.id = `canvas-${chartConfig.id}`;
+            body.appendChild(canvas);
+
+            if (chartConfig.type === 'gauge') {
+                const gVal = document.createElement('div');
+                gVal.className = 'gauge-value';
+                gVal.textContent = '0';
+                body.appendChild(gVal);
+            }
+
+            wrapper.appendChild(body);
+            chartsContainer.appendChild(wrapper);
+
+            const ctx = canvas.getContext('2d');
+            let instance;
+            const color = COLORS[charts.indexOf(chartConfig) % COLORS.length];
+
+            if (chartConfig.type === 'line') {
+                instance = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels: [], datasets: [{
+                        label: chartConfig.metric,
+                        data: [],
+                        borderColor: color,
+                        backgroundColor: color + '22',
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: chartConfig.range === '1h' ? 3 : 0
+                    }] },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() } } },
+                        scales: {
+                            y: { ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() } },
+                            x: { ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() } }
+                        }
+                    }
+                });
+                updateChartRange(chartConfig.id, chartConfig.range || '1h');
+            } else {
+                const gaugeBg = getComputedStyle(document.documentElement).getPropertyValue('--gauge-bg').trim();
+                instance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        datasets: [{
+                            data: [0, chartConfig.max || 1000],
+                            backgroundColor: [color, gaugeBg],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        rotation: -90,
+                        circumference: 180,
+                        cutout: '80%',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                    }
+                });
+            }
+            chartConfig.instance = instance;
+        }
+
+        function removeChart(id) {
+            charts = charts.filter(c => c.id !== id);
+            const el = document.getElementById(`chart-wrapper-${id}`);
+            if (el) el.remove();
+            saveCharts();
+        }
+
+        document.getElementById('addChartBtn').onclick = () => {
+            document.getElementById('chartTitle').value = '';
+            addChartModal.classList.remove('hidden');
+        };
+        document.getElementById('cancelChartBtn').onclick = () => addChartModal.classList.add('hidden');
+        document.getElementById('saveChartBtn').onclick = () => {
+            const config = {
+                id: Date.now().toString(),
+                title: document.getElementById('chartTitle').value || document.getElementById('chartMetric').value,
+                metric: chartMetricSelect.value,
+                type: document.getElementById('chartType').value,
+                max: parseFloat(document.getElementById('chartMax').value) || 1000,
+                range: '1h'
+            };
+            charts.push(config);
+            createChartUI(config);
+            saveCharts();
+            addChartModal.classList.add('hidden');
+        };
+
+        async function init() {
+            const savedCharts = JSON.parse(localStorage.getItem('dashboard_charts') || '[]');
+            if (savedCharts.length === 0) {
+                savedCharts.push({ id: 'default1', title: 'Solar Power', metric: 'solar_power', type: 'line', range: '1h' });
+                savedCharts.push({ id: 'default2', title: 'Battery', metric: 'battery_voltage', type: 'gauge', max: 15 });
+            }
+
+            charts = savedCharts;
+            charts.forEach(c => createChartUI(c));
+
+            fetch('/api/last')
+                .then(res => res.json())
+                .then(data => { if (data.data) renderMetrics(data.data); });
+
+            connectWebSocket();
+        }
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+            ws.onopen = () => updateStatus(true);
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'new_data') {
+                    renderMetrics(msg.payload.data);
+                    const timeStr = msg.payload.timestamp.split(' ')[1].split('.')[0];
+                    charts.forEach(c => {
+                        if (c.type === 'line' && c.instance && c.range === '1h') {
+                            c.instance.data.labels.push(timeStr);
+                            c.instance.data.datasets[0].data.push(msg.payload.data[c.metric]);
+                            if (c.instance.data.labels.length > 60) {
+                                c.instance.data.labels.shift();
+                                c.instance.data.datasets[0].data.shift();
+                            }
+                            c.instance.update('none');
+                        }
+                    });
+                }
+            };
+            ws.onclose = () => {
+                updateStatus(false);
+                setTimeout(connectWebSocket, 5000);
+            };
+        }
+
+        init();
+    </script>
+</body>
+</html>
