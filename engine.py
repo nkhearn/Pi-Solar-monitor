@@ -4,9 +4,12 @@ import subprocess
 import sqlite3
 import time
 import asyncio
-import aiohttp
 from datetime import datetime
-import api  # Import our api module to notify websockets
+try:
+    import api  # Import our api module to notify websockets
+except ImportError:
+    api = None
+import requests
 
 DB_PATH = "data/inverter_logs.db"
 COLLECTORS_DIR = "collectors"
@@ -14,43 +17,72 @@ MACRODROID_URL = "https://trigger.macrodroid.com/UUID/power"
 
 async def send_to_macrodroid(payload_dict):
     """
-    Asynchronously sends data to Macrodroid webhook.
+    Asynchronously sends data to Macrodroid webhook using requests in a thread.
     """
     headers = {'Content-Type': 'application/json'}
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(MACRODROID_URL, json=payload_dict, headers=headers) as response:
-                if response.status == 200:
-                    print("Macrodroid Triggered Successfully")
-                else:
-                    text = await response.text()
-                    print(f"Macrodroid Error: {response.status} - {text}")
+        def do_post():
+            return requests.post(MACRODROID_URL, json=payload_dict, headers=headers, timeout=10)
+
+        response = await asyncio.to_thread(do_post)
+        if response.status_code == 200:
+            print("Macrodroid Triggered Successfully")
+        else:
+            print(f"Macrodroid Error: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Macrodroid Connection Error: {e}")
-
-def run_collector(filepath):
+async def run_collector(filepath):
     """
-    Runs an executable and returns its JSON output.
+    Runs an executable and returns its JSON output with a 55 second timeout.
     """
     try:
-        result = subprocess.run([filepath], capture_output=True, text=True, check=True)
-        return json.loads(result.stdout)
+        proc = await asyncio.create_subprocess_exec(
+            filepath,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=55)
+            if proc.returncode == 0:
+                try:
+                    return json.loads(stdout.decode())
+                except json.JSONDecodeError:
+                    print(f"Error: Collector {filepath} returned invalid JSON.")
+                    return None
+            else:
+                print(f"Error: Collector {filepath} exited with code {proc.returncode}")
+                if stderr:
+                    print(f"Stderr: {stderr.decode().strip()}")
+                return None
+        except asyncio.TimeoutError:
+            print(f"Error: Collector {filepath} timed out after 55 seconds. Killing process.")
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception as e:
+                print(f"Failed to kill process {filepath}: {e}")
+            return None
     except Exception as e:
         print(f"Error running collector {filepath}: {e}")
         return None
 
-def collect_all():
+async def collect_all():
     """
-    Iterates through all executables in the collectors directory and aggregates data.
+    Iterates through all executables in the collectors directory and aggregates data in parallel.
     """
     aggregated_data = {}
     if not os.path.exists(COLLECTORS_DIR):
         return aggregated_data
 
+    tasks = []
     for filename in sorted(os.listdir(COLLECTORS_DIR)):
         filepath = os.path.join(COLLECTORS_DIR, filename)
         if os.path.isfile(filepath) and os.access(filepath, os.X_OK):
-            data = run_collector(filepath)
+            tasks.append(run_collector(filepath))
+
+    if tasks:
+        results = await asyncio.gather(*tasks)
+        for data in results:
             if data and isinstance(data, dict):
                 aggregated_data.update(data)
 
@@ -74,11 +106,14 @@ async def collect_now():
     Performs a single collection cycle.
     """
     print(f"Collecting data at {datetime.now()}")
-    data = collect_all()
+    data = await collect_all()
     if data:
         save_to_db(data)
         # Notify websockets
-        await api.notify_new_data({"timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%f'), "data": data})
+        if api:
+            await api.notify_new_data({"timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%f'), "data": data})
+        else:
+            print("Skipping websocket notification (api not available)")
         # Send to Macrodroid
         await send_to_macrodroid(data)
         print(f"Data saved and broadcasted: {len(data)} keys")
