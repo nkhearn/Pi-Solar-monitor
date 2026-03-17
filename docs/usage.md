@@ -1,0 +1,58 @@
+# Usage Guide
+
+The Pi Solar Monitor provides a real-time web dashboard and automation integrations.
+
+## Web Dashboard
+
+Access the dashboard at `http://<your-pi-ip>:8000`.
+
+### Real-time Metrics
+
+The dashboard automatically categorizes and displays metrics collected by the system.
+- **Solar**: PV voltage, power, etc.
+- **Battery**: Voltage, charge/discharge current, SOC.
+- **Temperature**: Readings from DS18B20 sensors.
+
+![Dashboard Light Mode](../screenshots/dashboard.png)
+
+### Customization
+
+#### Themes
+Toggle between Light and Dark modes using the button in the header. Your preference is saved in your browser's local storage.
+
+![Dashboard Dark Mode](../screenshots/dashboard_dark.png)
+
+#### Adding Charts
+You can add custom charts to visualize any numeric metric.
+1. Click the **+ Add Chart** button.
+2. Select the **Metric** to visualize.
+3. Choose the **Chart Type**:
+    - **Line Chart**: Shows historical trends over time (1h, 24h, 7d).
+    - **Gauge**: Shows the latest value on a semi-circular scale.
+4. Set a **Max Value** for Gauge charts.
+
+![Add Chart Modal](../screenshots/add_chart_modal.png)
+
+#### Managing Charts
+- **Time Range**: On line charts, use the 1h, 24h, or 7d buttons to change the scale.
+- **Removing**: Click the **Remove** button on any chart card to delete it from your dashboard.
+
+---
+
+## Automation (Macrodroid)
+
+The system can trigger Macrodroid webhooks on every data collection cycle (every minute).
+
+### Configuration
+
+1. Open `engine.py`.
+2. Locate the `MACRODROID_URL` constant.
+3. Replace the placeholder URL with your device's unique Macrodroid webhook URL.
+
+```python
+MACRODROID_URL = "https://trigger.macrodroid.com/YOUR_DEVICE_UUID/solar_data"
+```
+
+### Data Payload
+
+The entire collected data object is sent as a JSON payload in a POST request. You can use Macrodroid's "HTTP Request" trigger and parse the JSON variables to create automations (e.g., "Notify me if battery is below 48V").
