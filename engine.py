@@ -10,7 +10,7 @@ import api  # Import our api module to notify websockets
 
 DB_PATH = "data/inverter_logs.db"
 COLLECTORS_DIR = "collectors"
-MACRODROID_URL = "https://trigger.macrodroid.com/bd90402d-9b0a-4e6d-a8dc-5b073fc88657/power"
+MACRODROID_URL = "https://trigger.macrodroid.com/UUID/power"
 
 async def send_to_macrodroid(payload_dict):
     """
