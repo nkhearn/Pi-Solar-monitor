@@ -60,9 +60,30 @@
             font-size: 0.9em;
             padding: 5px 10px;
             border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
-        .connected { background-color: #d4edda; color: #155724; }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .connected::before {
+            content: "";
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #28a745;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
         .disconnected { background-color: #f8d7da; color: #721c24; }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(40, 167, 69, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+        }
 
         .btn {
             padding: 8px 12px;
@@ -241,8 +262,8 @@
         <header>
             <h1>Solar Monitor</h1>
             <div class="controls">
-                <button id="themeToggle" class="btn">🌙 Dark Mode</button>
-                <div id="status" class="status disconnected">Connecting...</div>
+                <button id="themeToggle" class="btn" aria-label="Toggle dark mode">🌙 Dark Mode</button>
+                <div id="status" class="status disconnected" aria-live="polite">Connecting...</div>
             </div>
         </header>
 
@@ -267,7 +288,7 @@
 
         <div class="section-title">
             Charts
-            <button id="addChartBtn" class="btn btn-primary">➕ Add Chart</button>
+            <button id="addChartBtn" class="btn btn-primary" aria-label="Add new chart">➕ Add Chart</button>
         </div>
         <div class="chart-grid" id="charts-container">
             <!-- Charts injected here -->
@@ -275,26 +296,26 @@
     </div>
 
     <!-- Add Chart Modal -->
-    <div id="addChartModal" class="modal hidden">
+    <div id="addChartModal" class="modal hidden" role="dialog" aria-labelledby="modalTitle">
         <div class="modal-content">
-            <div class="modal-header">Add New Chart</div>
+            <div id="modalTitle" class="modal-header">Add New Chart</div>
             <div class="form-group">
-                <label>Title</label>
+                <label for="chartTitle">Title</label>
                 <input type="text" id="chartTitle" placeholder="My Chart">
             </div>
             <div class="form-group">
-                <label>Metric</label>
+                <label for="chartMetric">Metric</label>
                 <select id="chartMetric"></select>
             </div>
             <div class="form-group">
-                <label>Chart Type</label>
+                <label for="chartType">Chart Type</label>
                 <select id="chartType">
                     <option value="line">Line Chart</option>
                     <option value="gauge">Gauge (Latest Value)</option>
                 </select>
             </div>
             <div class="form-group" id="maxValGroup">
-                <label>Max Value (for Gauge)</label>
+                <label for="chartMax">Max Value (for Gauge)</label>
                 <input type="number" id="chartMax" value="1000">
             </div>
             <div class="modal-actions">
