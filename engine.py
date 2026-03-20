@@ -31,9 +31,9 @@ async def send_to_macrodroid(payload_dict):
             print(f"Macrodroid Error: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Macrodroid Connection Error: {e}")
-async def run_collector(filepath):
+async def run_collector(filepath, timeout=55):
     """
-    Runs an executable and returns its JSON output with a 55 second timeout.
+    Runs an executable and returns its JSON output with a specified timeout.
     """
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -42,7 +42,7 @@ async def run_collector(filepath):
             stderr=asyncio.subprocess.PIPE
         )
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=55)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             if proc.returncode == 0:
                 try:
                     return json.loads(stdout.decode())
@@ -55,7 +55,7 @@ async def run_collector(filepath):
                     print(f"Stderr: {stderr.decode().strip()}")
                 return None
         except asyncio.TimeoutError:
-            print(f"Error: Collector {filepath} timed out after 55 seconds. Killing process.")
+            print(f"Error: Collector {filepath} timed out after {timeout} seconds. Killing process.")
             try:
                 proc.kill()
                 await proc.wait()
@@ -66,25 +66,51 @@ async def run_collector(filepath):
         print(f"Error running collector {filepath}: {e}")
         return None
 
-async def collect_all():
+async def collect_from_dirs(directories, timeout=55):
     """
-    Iterates through all executables in the collectors directory and aggregates data in parallel.
+    Iterates through specified directories and aggregates data from executables.
     """
     aggregated_data = {}
-    if not os.path.exists(COLLECTORS_DIR):
-        return aggregated_data
-
     tasks = []
-    for filename in sorted(os.listdir(COLLECTORS_DIR)):
-        filepath = os.path.join(COLLECTORS_DIR, filename)
-        if os.path.isfile(filepath) and os.access(filepath, os.X_OK):
-            tasks.append(run_collector(filepath))
+    for directory in directories:
+        if not os.path.exists(directory):
+            continue
+        for filename in sorted(os.listdir(directory)):
+            filepath = os.path.join(directory, filename)
+            if os.path.isfile(filepath) and os.access(filepath, os.X_OK):
+                tasks.append(run_collector(filepath, timeout))
 
     if tasks:
         results = await asyncio.gather(*tasks)
         for data in results:
             if data and isinstance(data, dict):
                 aggregated_data.update(data)
+
+    return aggregated_data
+
+async def collect_all(run_hourly=False, run_daily=False):
+    """
+    Aggregates data from all relevant collector directories based on the schedule.
+    """
+    # Minutely and root collectors (55s timeout)
+    dirs_55s = [COLLECTORS_DIR, os.path.join(COLLECTORS_DIR, "minutely")]
+
+    # Hourly and Daily collectors (300s timeout)
+    dirs_300s = []
+    if run_hourly:
+        dirs_300s.append(os.path.join(COLLECTORS_DIR, "hourly"))
+    if run_daily:
+        dirs_300s.append(os.path.join(COLLECTORS_DIR, "daily"))
+
+    tasks = [collect_from_dirs(dirs_55s, timeout=55)]
+    if dirs_300s:
+        tasks.append(collect_from_dirs(dirs_300s, timeout=300))
+
+    results = await asyncio.gather(*tasks)
+
+    aggregated_data = {}
+    for data in results:
+        aggregated_data.update(data)
 
     return aggregated_data
 
@@ -104,12 +130,12 @@ def save_to_db(data):
     conn.commit()
     conn.close()
 
-async def collect_now():
+async def collect_now(run_hourly=False, run_daily=False):
     """
     Performs a single collection cycle.
     """
-    print(f"Collecting data at {datetime.now()}")
-    data = await collect_all()
+    print(f"Collecting data at {datetime.now()} (hourly={run_hourly}, daily={run_daily})")
+    data = await collect_all(run_hourly=run_hourly, run_daily=run_daily)
     if data:
         # Save to DB in a separate thread to avoid blocking the main event loop
         await asyncio.to_thread(save_to_db, data)
@@ -126,20 +152,31 @@ async def collect_now():
 
 async def collection_loop():
     """
-    Main loop that runs every minute.
+    Main loop that runs every minute and schedules hourly/daily tasks.
     """
     print("Starting data collection engine...")
+
+    # On startup, we determine if it's the top of the hour or midnight
+    now = datetime.now()
+    run_hourly = (now.minute == 0)
+    run_daily = (run_hourly and now.hour == 0)
+
     # Perform an initial collection immediately
-    await collect_now()
+    await collect_now(run_hourly=run_hourly, run_daily=run_daily)
 
     while True:
         # Align with the next minute mark
-        now = time.time()
-        sleep_time = 60 - (now % 60)
+        now_ts = time.time()
+        sleep_time = 60 - (now_ts % 60)
         if sleep_time < 1: # avoid double execution if we are very close to the minute mark
             sleep_time += 60
         await asyncio.sleep(sleep_time)
-        await collect_now()
+
+        now = datetime.now()
+        run_hourly = (now.minute == 0)
+        run_daily = (run_hourly and now.hour == 0)
+
+        await collect_now(run_hourly=run_hourly, run_daily=run_daily)
 
 if __name__ == "__main__":
     try:

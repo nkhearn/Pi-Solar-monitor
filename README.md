@@ -92,7 +92,16 @@ To ensure the monitor starts automatically on boot, create a systemd service fil
 
 ## Custom Collectors
 
-The engine executes any file in the `collectors/` directory that has execution permissions. Each collector should output a valid JSON object to `stdout`. The engine aggregates these objects into a single record every minute.
+The engine executes any file in the `collectors/` directory (and its scheduled subdirectories) that has execution permissions. Each collector should output a valid JSON object to `stdout`. The engine aggregates these objects into a single record.
+
+### Scheduling
+
+You can schedule collectors by placing them in specific subdirectories within the `collectors/` folder:
+
+- **`collectors/`**: Scripts in the root run every minute (55s timeout).
+- **`collectors/minutely/`**: Scripts run every minute (55s timeout).
+- **`collectors/hourly/`**: Scripts run at the top of every hour (300s timeout).
+- **`collectors/daily/`**: Scripts run at midnight (00:00) every day (300s timeout).
 
 ### Implementing a Custom Collector
 
