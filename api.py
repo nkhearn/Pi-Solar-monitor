@@ -44,6 +44,9 @@ manager = ConnectionManager()
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    # Performance optimizations for SQLite (WAL is already set at DB init)
+    conn.execute('PRAGMA synchronous=NORMAL')
+    conn.execute('PRAGMA cache_size=-10000')  # 10MB cache for faster lookups
     return conn
 
 @app.get("/api/last")
@@ -59,22 +62,25 @@ async def get_last():
 
 @app.get("/api/keys")
 async def get_keys():
+    """
+    Returns a list of all unique keys in the last 100 records.
+    Uses SQLite's json_each for more efficient key extraction directly in the database.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
-    # Get the last 100 records to find all unique keys (increased for better coverage)
-    cursor.execute('SELECT data FROM data_points ORDER BY timestamp DESC LIMIT 100')
+
+    # Use json_each to find unique keys within the last 100 records
+    query = """
+    SELECT DISTINCT json_each.key
+    FROM data_points, json_each(data_points.data)
+    WHERE data_points.id IN (SELECT id FROM data_points ORDER BY timestamp DESC LIMIT 100)
+    """
+    cursor.execute(query)
     rows = cursor.fetchall()
     conn.close()
 
-    keys = set()
-    for row in rows:
-        try:
-            data = json.loads(row["data"])
-            keys.update(data.keys())
-        except Exception:
-            continue
-
-    return sorted(list(keys))
+    keys = [row[0] for row in rows]
+    return sorted(keys)
 
 @app.get("/api/data/{key}/last")
 async def get_data_last(key: str):

@@ -16,6 +16,10 @@ def init_db():
     ''')
     # Index for faster time-range queries
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON data_points(timestamp)')
+
+    # Enable Write-Ahead Logging for better concurrency and performance
+    cursor.execute('PRAGMA journal_mode=WAL')
+
     conn.commit()
     conn.close()
 

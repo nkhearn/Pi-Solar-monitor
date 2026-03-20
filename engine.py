@@ -96,6 +96,9 @@ def save_to_db(data):
         return
 
     conn = sqlite3.connect(DB_PATH)
+    # Optimization: Set synchronous to NORMAL for faster writes.
+    # WAL mode is already set at database creation.
+    conn.execute('PRAGMA synchronous=NORMAL')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO data_points (data) VALUES (?)', (json.dumps(data),))
     conn.commit()
@@ -108,7 +111,8 @@ async def collect_now():
     print(f"Collecting data at {datetime.now()}")
     data = await collect_all()
     if data:
-        save_to_db(data)
+        # Save to DB in a separate thread to avoid blocking the main event loop
+        await asyncio.to_thread(save_to_db, data)
         # Notify websockets
         if api:
             await api.notify_new_data({"timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%f'), "data": data})
