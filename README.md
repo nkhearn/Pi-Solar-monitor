@@ -12,10 +12,10 @@ The system periodically polls various data sources via custom "collectors", stor
 - **REST API**: Easy access to the latest data and historical logs.
 - **Macrodroid Integration**: Automatically trigger Macrodroid webhooks with collected data for automation.
 - **Lightweight**: Optimized for low-power hardware like the Pi Zero 2 W.
+  
 
-![Project Carousel](screenshots/output.gif)
-- 
-Demo: <video src="https://github.com/nkhearn/Pi-Solar-monitor/raw/refs/heads/main/screenshots/dashboard_interaction.webm" autoplay loop muted playsinline controls width="100%">
+## Demo
+<video src="https://github.com/user-attachments/assets/7c12bd5d-e5e5-418a-a0c9-a53362b35552" autoplay loop muted playsinline controls width="100%">
 </video>
 
 
