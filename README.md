@@ -4,6 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-v0.100%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![SQLite](https://img.shields.io/badge/SQLite-v3.0%2B-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Zero%202%20W-C51A4A?logo=raspberry-pi&logoColor=white)](https://www.raspberrypi.com/products/raspberry-pi-zero-2-w/)
+[![Chart.js](https://img.shields.io/badge/Chart.js%20-v4.0-%20blue?logo=chartdotjs)](https://www.chartjs.org/)
+
 
 A lightweight, modular data collection and monitoring system designed for solar power setups. It is explicitly compatible with the **Raspberry Pi Zero 2 W**.
 
