@@ -65,4 +65,4 @@ MACRODROID_URL = "https://trigger.macrodroid.com/YOUR_DEVICE_UUID/solar_data"
 
 ### 📦 Data Payload
 
-The entire collected data object is sent as a JSON payload in a POST request. You can use Macrodroid's "HTTP Request" trigger and parse the JSON variables to create custom automations (e.g., "Notify me if battery is below 48V").
+The entire collected data object is sent as a JSON payload in a POST request. You can use Macrodroid's "Webhook" trigger and parse the JSON variables to create custom automations (e.g., "Notify me if battery is below 48V").
