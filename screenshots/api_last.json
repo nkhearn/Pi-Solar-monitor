@@ -1,1 +1,1 @@
-{"timestamp":"2026-03-17 21:43:178170","data":{"solar_power":668.8,"pv_voltage":42.0,"pv_current":14.4,"battery_voltage":13.62,"battery_soc":92.3,"water_in":17.8,"water_out":40.1,"load_watt":211.3,"solar_prediction":1947.8}}
+{"timestamp":"2026-03-20 17:39:00.074","data":{"solar_power":130.15,"battery_voltage":13.99,"battery_soc":94,"load_power":127.51,"water_in":20.84,"water_out":36.35,"solar_prediction":5596.96}}
