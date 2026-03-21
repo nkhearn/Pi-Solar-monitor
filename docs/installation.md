@@ -1,12 +1,14 @@
-# Installation Guide
+# 🛠️ Installation Guide
 
-This guide provides detailed instructions for setting up the Pi Solar Monitor on a Raspberry Pi (optimized for Pi Zero 2 W).
+This guide provides detailed instructions for setting up the **Pi Solar Monitor** on a Raspberry Pi, specifically optimized for the **Pi Zero 2 W**.
 
-## Hardware Setup
+---
 
-### 1-Wire Interface (for Temperature Sensors)
+## 🔌 Phase 1: Hardware Setup
 
-The system uses DS18B20 sensors via the 1-Wire protocol. This must be enabled in the Pi's configuration.
+### 🌡️ 1-Wire Interface (for Temperature Sensors)
+
+The system uses **DS18B20** sensors via the 1-Wire protocol. This must be enabled in the Pi's configuration.
 
 1.  **Enable via raspi-config:**
     - Run `sudo raspi-config`.
@@ -19,16 +21,20 @@ The system uses DS18B20 sensors via the 1-Wire protocol. This must be enabled in
     - Add `dtoverlay=w1-gpio` to the end of the file.
     - Save and reboot.
 
-### Inverter Connection
+> [!TIP]
+> Ensure your DS18B20 sensors are correctly wired with a 4.7kΩ pull-up resistor between the Data and 3.3V lines for reliable readings.
+
+### 🔋 Inverter Connection
 
 The system typically communicates with Voltronic-compatible inverters via USB.
-- Ensure the inverter is connected to the Pi.
-- The default `inverter.py` collector expects the device at `/dev/hidraw0`.
-- You may need to grant permissions: `sudo chmod a+rw /dev/hidraw0`.
+
+- **Direct Link**: Connect the inverter's USB port to the Pi.
+- **Device Path**: The default `inverter.py` collector expects the device at `/dev/hidraw0`.
+- **Permissions**: You may need to grant access permissions: `sudo chmod a+rw /dev/hidraw0`.
 
 ---
 
-## Software Installation
+## 💻 Phase 2: Software Installation
 
 ### 1. Clone the Repository
 
@@ -39,6 +45,8 @@ cd pi-solar-monitor
 
 ### 2. Install Python Dependencies
 
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+
 It is recommended to use a virtual environment or ensure all system dependencies are met.
 
 ```bash
@@ -47,17 +55,20 @@ pip install -r requirements.txt
 
 ### 3. Initialize the Database
 
-The system uses SQLite to store historical data. Run the initialization script to create the necessary tables.
+The system uses **SQLite** to store historical data. Run the initialization script to create the necessary tables.
 
 ```bash
 python3 init_db.py
 ```
 
+> [!IMPORTANT]
+> The database stores all historical data indefinitely. Ensure your SD card has sufficient free space for long-term logging.
+
 ---
 
-## Running the Monitor
+## 🚀 Phase 3: Running the Monitor
 
-### Manual Start
+### ⏱️ Manual Start
 
 To start both the collection engine and the web/API server:
 
@@ -67,7 +78,7 @@ python3 main.py
 
 The dashboard will be accessible at `http://<your-pi-ip>:8000`.
 
-### Background Service (Systemd)
+### ⚡ Background Service (Systemd)
 
 To ensure the monitor starts automatically on boot and restarts on failure, set it up as a systemd service.
 

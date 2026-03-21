@@ -1,14 +1,30 @@
-# Pi-Solar-Monitor Wiki
+# ☀️ Pi-Solar-Monitor Documentation
 
-Welcome to the Pi-Solar-Monitor documentation! This project provides a robust system for monitoring solar inverter data using a Raspberry Pi.
-
-## Documentation Sections
-
-- [Installation](Installation) - How to set up the system.
-- [Usage](Usage) - Basic operation and dashboard overview.
-- [Collectors](Collectors) - Information on data collection scripts.
-- [API Reference](API) - Details on the REST API endpoints.
-- [Websockets](Websockets) - Real-time data streaming information.
+Welcome to the **Pi-Solar-Monitor** documentation! This project provides a lightweight, robust system for monitoring solar inverter data, specifically optimized for the Raspberry Pi Zero 2 W.
 
 ---
-*This wiki is automatically generated from the `docs/` folder in the repository.*
+
+## 🚀 Quick Navigation
+
+Explore the core sections to get started, customize your setup, or integrate with other tools.
+
+| Section | Description |
+| :--- | :--- |
+| [**⚙️ Installation**](installation.md) | How to set up the hardware and software. |
+| [**🖥️ Usage**](usage.md) | Dashboard overview and customization. |
+| [**🔌 Collectors**](collectors.md) | Managing and creating data collection scripts. |
+| [**📡 REST API**](api.md) | Detailed documentation on data endpoints. |
+| [**⚡ WebSockets**](websockets.md) | Real-time data streaming specifications. |
+
+---
+
+## 🔍 Overview
+
+Pi-Solar-Monitor is designed to be:
+- **Lightweight**: Minimal CPU/RAM footprint.
+- **Modular**: Easy to add new sensors via custom collectors.
+- **Real-time**: Live updates via WebSockets and a responsive dashboard.
+- **Durable**: Reliable local SQLite storage for long-term data logging.
+
+---
+*This documentation is maintained in the `docs/` folder of the repository.*
