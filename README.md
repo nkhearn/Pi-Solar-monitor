@@ -14,6 +14,10 @@ The system periodically polls various data sources via custom "collectors", stor
 - **Lightweight**: Optimized for low-power hardware like the Pi Zero 2 W.
 
 ![Project Carousel](screenshots/output.gif)
+- 
+Demo: <video src="screenshots/dashboard_interaction.webm" autoplay loop muted playsinline controls width="100%">
+</video>
+
 
 ## Hardware Setup
 
