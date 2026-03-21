@@ -61,6 +61,38 @@ cpu_temp=$(cat /sys/class/thermal/thermal_zone0/temp)
 echo "{\"cpu_temperature\": $(($cpu_temp / 1000))}"
 ```
 
+### Example: Analog Voltage Sensor (via ADC)
+
+Here is an example of a Python collector that reads a voltage from an ADS1115 ADC:
+
+```python
+#!/usr/bin/env python3
+import json
+import sys
+
+# Example using a library like Adafruit_ADS1x15
+# (Ensure you install necessary libraries first)
+try:
+    # This is a mock example of reading an ADC
+    # In a real scenario, you'd use: import Adafruit_ADS1x15
+
+    voltage_reading = 12.65  # Replace with actual sensor reading logic
+
+    data = {
+        "battery_voltage": voltage_reading
+    }
+
+    print(json.dumps(data))
+except Exception as e:
+    # It's best to output nothing or handle errors silently to avoid
+    # corrupting the aggregated JSON if the engine doesn't catch it.
+    sys.exit(1)
+```
+
+**Steps to implement:**
+1. Save the script in the `collectors/` directory (e.g., `collectors/voltage.py`).
+2. Make it executable: `chmod +x collectors/voltage.py`.
+
 ### Deployment Steps
 
 1.  Save your script in the `collectors/` directory.
