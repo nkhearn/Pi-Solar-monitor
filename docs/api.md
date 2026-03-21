@@ -1,19 +1,17 @@
-# REST API Documentation
+# 📡 REST API Documentation
 
-The Pi Solar Monitor provides a comprehensive REST API for accessing latest and historical data.
+The **Pi Solar Monitor** provides a comprehensive REST API for accessing latest and historical data.
 
-## Base URL
+## 🔗 Base URL
 `http://<your-pi-ip>:8000`
 
 ---
 
-## Global Endpoints
+## 🌍 Global Endpoints
 
-### Get Latest Record
+### `GET` /api/last
 Returns the most recent aggregated data point.
 
-- **URL**: `/api/last`
-- **Method**: `GET`
 - **Success Response**:
   - **Code**: 200
   - **Content**:
@@ -27,15 +25,16 @@ Returns the most recent aggregated data point.
     }
     ```
 
-### Get Historical Records
+---
+
+### `GET` /api/history
 Returns a list of recent aggregated data points.
 
-- **URL**: `/api/history`
-- **Method**: `GET`
 - **Query Parameters**:
     - `limit` (optional): Max number of records (default 100).
     - `start` (optional): ISO timestamp or relative time (e.g., `1h`, `today`).
     - `end` (optional): ISO timestamp or relative time.
+
 - **Success Response**:
   - **Code**: 200
   - **Content**:
@@ -52,11 +51,11 @@ Returns a list of recent aggregated data points.
     ]
     ```
 
-### Get Available Keys
+---
+
+### `GET` /api/keys
 Returns a list of all unique data keys found in recent records.
 
-- **URL**: `/api/keys`
-- **Method**: `GET`
 - **Success Response**:
   - **Code**: 200
   - **Content**:
@@ -72,15 +71,13 @@ Returns a list of all unique data keys found in recent records.
 
 ---
 
-## Data-Specific Endpoints
+## 📈 Data-Specific Endpoints
 
 These endpoints focus on a single metric (key) within the data.
 
-### Get Latest Value for Key
+### `GET` /api/data/{key}/last
 Returns the most recent value for a specific key.
 
-- **URL**: `/api/data/{key}/last`
-- **Method**: `GET`
 - **Success Response**:
   - **Code**: 200
   - **Content**:
@@ -91,15 +88,16 @@ Returns the most recent value for a specific key.
     }
     ```
 
-### Get Historical Values for Key
+---
+
+### `GET` /api/data/{key}/history
 Returns historical values for a key in a compact format suitable for charting.
 
-- **URL**: `/api/data/{key}/history`
-- **Method**: `GET`
 - **Query Parameters**:
     - `limit` (optional): Default 100.
     - `start`, `end` (optional): ISO timestamp or relative time (`10s`, `5m`, `1h`, `7d`, `today`).
     - `gt`, `lt`, `eq` (optional): Value filters (Greater than, Less than, Equal to).
+
 - **Success Response**:
   - **Code**: 200
   - **Content**:
@@ -111,14 +109,15 @@ Returns historical values for a key in a compact format suitable for charting.
     ]
     ```
 
-### Get Statistics for Key
+---
+
+### `GET` /api/data/{key}/stats
 Returns aggregate statistics for a key over a period.
 
-- **URL**: `/api/data/{key}/stats`
-- **Method**: `GET`
 - **Query Parameters**:
     - `start`, `end` (optional): Time range.
     - `gt`, `lt`, `eq` (optional): Value filters.
+
 - **Success Response**:
   - **Code**: 200
   - **Content**:
@@ -134,7 +133,7 @@ Returns aggregate statistics for a key over a period.
 
 ---
 
-## Time Filtering Format
+## ⏲️ Time Filtering Format
 
 The `start` and `end` parameters support:
 - **ISO Timestamps**: `2023-10-27 10:00:00`
