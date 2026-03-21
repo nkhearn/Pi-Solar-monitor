@@ -45,7 +45,7 @@ The Pi Solar Monitor is engineered for efficiency on the Raspberry Pi Zero 2 W:
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/nkhearn/Pi-Solar-monitor.git
 cd pi-solar-monitor
 
 # Install dependencies
