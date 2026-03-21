@@ -1,4 +1,4 @@
-# ⚡ WebSocket API Documentation 💓
+# ⚡ WebSocket API Documentation
 
 The **Pi Solar Monitor** uses WebSockets to push live data updates to clients as soon as they are collected, ensuring your dashboard is always in sync.
 
