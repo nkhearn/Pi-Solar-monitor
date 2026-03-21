@@ -15,7 +15,7 @@ The system periodically polls various data sources via custom "collectors", stor
 
 ![Project Carousel](screenshots/output.gif)
 - 
-Demo: <video src="screenshots/dashboard_interaction.webm" autoplay loop muted playsinline controls width="100%">
+Demo: <video src="https://github.com/nkhearn/Pi-Solar-monitor/raw/refs/heads/main/screenshots/dashboard_interaction.webm" autoplay loop muted playsinline controls width="100%">
 </video>
 
 
