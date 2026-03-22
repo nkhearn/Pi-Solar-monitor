@@ -9,7 +9,8 @@ try:
     import api  # Import our api module to notify websockets
 except ImportError:
     api = None
-import requests
+import urllib.request
+import urllib.error
 
 DB_PATH = "data/inverter_logs.db"
 COLLECTORS_DIR = "collectors"
@@ -17,20 +18,25 @@ MACRODROID_URL = "https://trigger.macrodroid.com/UUID/power"
 
 async def send_to_macrodroid(payload_dict):
     """
-    Asynchronously sends data to Macrodroid webhook using requests in a thread.
+    Asynchronously sends data to Macrodroid webhook using urllib in a thread.
     """
     headers = {'Content-Type': 'application/json'}
     try:
         def do_post():
-            return requests.post(MACRODROID_URL, json=payload_dict, headers=headers, timeout=10)
+            data = json.dumps(payload_dict).encode('utf-8')
+            req = urllib.request.Request(MACRODROID_URL, data=data, headers=headers, method='POST')
+            with urllib.request.urlopen(req, timeout=10) as response:
+                return response.getcode(), response.read().decode('utf-8')
 
-        response = await asyncio.to_thread(do_post)
-        if response.status_code == 200:
+        status_code, response_text = await asyncio.to_thread(do_post)
+        if status_code == 200:
             print("Macrodroid Triggered Successfully")
         else:
-            print(f"Macrodroid Error: {response.status_code} - {response.text}")
-    except Exception as e:
+            print(f"Macrodroid Error: {status_code} - {response_text}")
+    except urllib.error.URLError as e:
         print(f"Macrodroid Connection Error: {e}")
+    except Exception as e:
+        print(f"Macrodroid Error: {e}")
 async def run_collector(filepath, timeout=55):
     """
     Runs an executable and returns its JSON output with a specified timeout.

@@ -1,4 +1,6 @@
-import requests
+import urllib.request
+import urllib.parse
+import json
 import time
 import subprocess
 import os
@@ -7,56 +9,61 @@ import signal
 def test_api():
     base_url = "http://127.0.0.1:8000"
 
+    def get(path):
+        url = f"{base_url}{path}"
+        with urllib.request.urlopen(url) as response:
+            return response.getcode(), json.loads(response.read().decode())
+
     # 1. Test /api/keys
     print("Testing /api/keys...")
-    response = requests.get(f"{base_url}/api/keys")
-    print(f"Status: {response.status_code}, Keys: {response.json()}")
-    assert response.status_code == 200
-    assert "solar_prediction" in response.json()
+    status, data = get("/api/keys")
+    print(f"Status: {status}, Keys: {data}")
+    assert status == 200
+    assert "solar_prediction" in data
 
     # 2. Test /api/data/solar_prediction/last
     print("\nTesting /api/data/solar_prediction/last...")
-    response = requests.get(f"{base_url}/api/data/solar_prediction/last")
-    print(f"Status: {response.status_code}, Data: {response.json()}")
-    assert response.status_code == 200
-    assert "value" in response.json()
+    status, data = get("/api/data/solar_prediction/last")
+    print(f"Status: {status}, Data: {data}")
+    assert status == 200
+    assert "value" in data
 
     # 3. Test /api/data/solar_prediction/history
     print("\nTesting /api/data/solar_prediction/history...")
-    response = requests.get(f"{base_url}/api/data/solar_prediction/history?limit=5")
-    print(f"Status: {response.status_code}, History: {response.json()}")
-    assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    status, data = get("/api/data/solar_prediction/history?limit=5")
+    print(f"Status: {status}, History: {data}")
+    assert status == 200
+    assert isinstance(data, list)
 
     # 4. Test /api/data/solar_prediction/history with relative time
     print("\nTesting /api/data/solar_prediction/history with start=1h...")
-    response = requests.get(f"{base_url}/api/data/solar_prediction/history?start=1h")
-    print(f"Status: {response.status_code}, History count: {len(response.json())}")
-    assert response.status_code == 200
+    status, data = get("/api/data/solar_prediction/history?start=1h")
+    print(f"Status: {status}, History count: {len(data)}")
+    assert status == 200
 
     # 5. Test /api/data/solar_prediction/stats
     print("\nTesting /api/data/solar_prediction/stats...")
-    response = requests.get(f"{base_url}/api/data/solar_prediction/stats")
-    print(f"Status: {response.status_code}, Stats: {response.json()}")
-    assert response.status_code == 200
-    assert "avg" in response.json()
-    assert "max" in response.json()
+    status, data = get("/api/data/solar_prediction/stats")
+    print(f"Status: {status}, Stats: {data}")
+    assert status == 200
+    assert "avg" in data
+    assert "max" in data
 
     # 6. Test original /api/history with relative time
     print("\nTesting original /api/history with start=today...")
-    response = requests.get(f"{base_url}/api/history?start=today")
-    print(f"Status: {response.status_code}, History count: {len(response.json())}")
-    assert response.status_code == 200
+    status, data = get("/api/history?start=today")
+    print(f"Status: {status}, History count: {len(data)}")
+    assert status == 200
 
     # 7. Test SQL Injection Resilience
     print("\nTesting SQL Injection resilience on /api/data/{key}/last...")
     # Malicious key that tries to close the json_extract and append something else
-    malicious_key = "foo') OR 1=1 --"
-    response = requests.get(f"{base_url}/api/data/{malicious_key}/last")
-    print(f"Status: {response.status_code}, Data: {response.json()}")
+    malicious_key = urllib.parse.quote("foo') OR 1=1 --")
+    status, data = get(f"/api/data/{malicious_key}/last")
+    print(f"Status: {status}, Data: {data}")
     # Should not return data and definitely not crash
-    assert response.status_code == 200
-    assert response.json()["value"] is None
+    assert status == 200
+    assert data["value"] is None
 
 if __name__ == "__main__":
     # Start the server
