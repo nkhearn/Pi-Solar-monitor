@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-import requests
+import urllib.request
+import urllib.parse
 import json
 
 def get_solar_predict():
@@ -16,9 +17,10 @@ def get_solar_predict():
     }
 
     try:
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        query_string = urllib.parse.urlencode(params)
+        full_url = f"{url}?{query_string}"
+        with urllib.request.urlopen(full_url, timeout=10) as response:
+            data = json.loads(response.read().decode())
         if "hourly" not in data:
             return {"solar_error": "Invalid API response"}
         gti_values = data["hourly"]["global_tilted_irradiance"]
