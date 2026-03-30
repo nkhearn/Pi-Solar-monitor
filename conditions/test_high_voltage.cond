@@ -1,0 +1,10 @@
+[conditions]
+[or]
+/api/data/pv_voltage/last > 200
+/api/data/pv_voltage/last < 100
+[and]
+round('/api/data/pv_voltage/stats/avg?start=1h', 1) != 0
+[action]
+echo "Action triggered: Voltage alert!" >> /tmp/condition_test.log
+[cooldown]
+1m

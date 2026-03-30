@@ -10,6 +10,7 @@ try:
 except ImportError:
     api = None
 import requests
+import condition_engine
 
 DB_PATH = "data/inverter_logs.db"
 COLLECTORS_DIR = "collectors"
@@ -150,6 +151,10 @@ async def collect_now(run_hourly=False, run_daily=False):
             print("Skipping websocket notification (api not available)")
         # Send to Macrodroid
         await send_to_macrodroid(data)
+
+        # Process conditional actions
+        await condition_engine.engine.process_conditions()
+
         print(f"Data saved and broadcasted: {len(data)} keys")
     else:
         print("No data collected.")
@@ -168,6 +173,9 @@ async def collection_loop():
     # Perform an initial collection immediately
     await collect_now(run_hourly=run_hourly, run_daily=run_daily)
 
+    # Track when we last purged old cooldowns
+    last_purge_hour = -1
+
     while True:
         # Align with the next minute mark
         now_ts = time.time()
@@ -179,6 +187,11 @@ async def collection_loop():
         now = datetime.now()
         run_hourly = (now.minute == 0)
         run_daily = (run_hourly and now.hour == 0)
+
+        # Purge old cooldown entries once per hour
+        if now.hour != last_purge_hour:
+            condition_engine.engine.purge_old_cooldowns()
+            last_purge_hour = now.hour
 
         await collect_now(run_hourly=run_hourly, run_daily=run_daily)
 
