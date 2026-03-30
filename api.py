@@ -182,6 +182,25 @@ async def get_data_stats(
         }
     return {"avg": None, "min": None, "max": None, "sum": None, "count": 0}
 
+@app.get("/api/data/{key}/stats/{stat_key}")
+async def get_data_single_stat(
+    key: str,
+    stat_key: str,
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
+    gt: Optional[float] = Query(None),
+    lt: Optional[float] = Query(None),
+    eq: Optional[float] = Query(None)
+):
+    """
+    Returns a specific statistic for a key.
+    Available stat_key: avg, min, max, sum, count.
+    """
+    stats = await get_data_stats(key, start, end, gt, lt, eq)
+    if stat_key not in stats:
+        raise HTTPException(status_code=400, detail=f"Invalid stat_key: {stat_key}. Available: avg, min, max, sum, count")
+    return stats[stat_key]
+
 @app.get("/api/history")
 async def get_history(start: Optional[str] = Query(None), end: Optional[str] = Query(None), limit: int = Query(100)):
     conn = get_db_connection()
