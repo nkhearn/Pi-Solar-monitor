@@ -13,12 +13,16 @@ import requests
 
 DB_PATH = "data/inverter_logs.db"
 COLLECTORS_DIR = "collectors"
-MACRODROID_URL = "https://trigger.macrodroid.com/UUID/power"
+# MACRODROID_URL = "https://trigger.macrodroid.com/UUID/power"
+MACRODROID_URL = os.getenv("MACRODROID_URL")
 
 async def send_to_macrodroid(payload_dict):
     """
     Asynchronously sends data to Macrodroid webhook using requests in a thread.
     """
+    if not MACRODROID_URL:
+        return
+
     headers = {'Content-Type': 'application/json'}
     try:
         def do_post():
