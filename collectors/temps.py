@@ -17,9 +17,10 @@ def get_temps():
                 with open(sensor_file, "r") as f:
                     raw_temp = f.read().strip()
                     results[label] = round(float(raw_temp) / 1000.0, 2)
-            # else: skip or add error
-        except Exception:
-            pass
+            else:
+                results[f"{label}_error"] = "Sensor file not found"
+        except (OSError, ValueError) as e:
+            results[f"{label}_error"] = str(e)
     return results
 
 if __name__ == "__main__":
