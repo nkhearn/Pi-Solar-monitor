@@ -449,13 +449,14 @@
                 other: document.getElementById('metrics-other')
             };
 
-            Object.values(categories).forEach(el => el.innerHTML = '');
             const seenCategories = new Set();
             const metrics = Object.keys(data).filter(k => typeof data[k] === 'number');
 
             if (metrics.length !== availableMetrics.length) {
                 availableMetrics = metrics;
                 updateMetricSelect();
+                // If the number of metrics changed, we might need to rebuild the UI to add/remove cards
+                Object.values(categories).forEach(el => el.innerHTML = '');
             }
 
             for (const key of Object.keys(data)) {
@@ -464,24 +465,37 @@
                 const category = getCategory(key);
                 seenCategories.add(category);
 
-                const card = document.createElement('div');
-                card.className = 'card';
+                let card = document.getElementById(`metric-card-${key}`);
+                let valueDiv;
 
-                const title = document.createElement('h3');
-                title.textContent = key.replace(/_/g, ' ');
+                if (!card) {
+                    card = document.createElement('div');
+                    card.className = 'card';
+                    card.id = `metric-card-${key}`;
 
-                const valueDiv = document.createElement('div');
-                valueDiv.className = 'value';
-                valueDiv.textContent = typeof data[key] === 'number' ? data[key].toFixed(2).replace(/\.00$/, '') : data[key];
+                    const title = document.createElement('h3');
+                    title.textContent = key.replace(/_/g, ' ');
 
-                const unit = document.createElement('span');
-                unit.className = 'unit';
-                valueDiv.appendChild(unit);
+                    valueDiv = document.createElement('div');
+                    valueDiv.className = 'value';
+                    valueDiv.id = `metric-value-${key}`;
 
-                card.appendChild(title);
-                card.appendChild(valueDiv);
+                    const unit = document.createElement('span');
+                    unit.className = 'unit';
+                    valueDiv.appendChild(unit);
 
-                categories[category].appendChild(card);
+                    card.appendChild(title);
+                    card.appendChild(valueDiv);
+                    categories[category].appendChild(card);
+                } else {
+                    valueDiv = document.getElementById(`metric-value-${key}`);
+                }
+
+                const displayValue = typeof data[key] === 'number' ? data[key].toFixed(2).replace(/\.00$/, '') : data[key];
+                // Update only the text node, preserving the .unit span
+                if (valueDiv.childNodes[0].textContent !== displayValue) {
+                    valueDiv.childNodes[0].textContent = displayValue;
+                }
             }
 
             Object.keys(categories).forEach(cat => {

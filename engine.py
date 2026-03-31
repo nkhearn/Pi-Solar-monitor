@@ -168,7 +168,8 @@ async def collect_now(run_hourly=False, run_daily=False):
 
         # Process conditional actions AFTER database write completes to avoid race conditions
         # (e.g. if conditions query the database for the data point we just saved)
-        await condition_engine.engine.process_conditions()
+        # We pass the current data to the condition engine to avoid redundant database lookups
+        await condition_engine.engine.process_conditions(current_data=data)
 
         print(f"Data saved and broadcasted: {len(data)} keys")
     else:
