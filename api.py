@@ -523,9 +523,12 @@ def build_data_query(
 async def notify_new_data(data_payload):
     v_metrics = get_virtual_metrics_map()
     if v_metrics:
-        data = data_payload["data"]
+        # Create a copy of the payload to avoid side effects on the input
+        data_payload = data_payload.copy()
+        data = data_payload["data"].copy()
         for name, formula in v_metrics.items():
             data[name] = evaluate_formula(formula, data)
+        data_payload["data"] = data
 
     message = json.dumps({"type": "new_data", "payload": data_payload})
     await manager.broadcast(message)
