@@ -14,7 +14,7 @@ The system periodically polls various data sources via custom "collectors", stor
 ## 📺 Visual Overview
 
 ### Demo
-<video src="https://github.com/user-attachments/assets/7c12bd5d-e5e5-418a-a0c9-a53362b35552" autoplay loop muted playsinline controls width="100%">
+<video src="screenshots/dashboard_demo.webm" autoplay loop muted playsinline controls width="100%">
 </video>
 
 ### Dashboard
@@ -25,8 +25,9 @@ The system periodically polls various data sources via custom "collectors", stor
 ## ✨ Features
 
 - 🔌 **Modular Collection**: Run any executable script or binary (Python, Bash, etc.) to collect data.
-- 🗄️ **Efficient Storage**: Local SQLite data retention with zero external dependencies.
+- 🗄️ **Efficient Storage**: High-performance local SQLite data retention with zero external dependencies.
 - 📊 **Real-time Dashboard**: Built-in web interface with live updates via WebSockets and historical visualization using Chart.js.
+- 🧮 **Advanced Virtual Metrics**: Define calculated values using arithmetic formulas with secure and efficient server-side evaluation.
 - ⚡ **Conditional Actions**: Define logic in `.cond` files to automate responses to system events.
 - 🔌 **Robust API**: REST and WebSocket endpoints for easy access to live and historical data.
 - 📲 **Automation Ready**: Integrated Macrodroid webhook support to trigger mobile notifications or logic.
@@ -34,10 +35,11 @@ The system periodically polls various data sources via custom "collectors", stor
 
 ## 🚀 High-Performance for Low-Power Hardware
 
-The Pi Solar Monitor is engineered for efficiency on the Raspberry Pi Zero 2 W:
-- **Optimized SQLite**: Uses Write-Ahead Logging (WAL) and `PRAGMA synchronous=NORMAL` for minimal disk I/O latency.
-- **Asynchronous I/O**: Database writes are offloaded to separate threads, keeping the main event loop responsive.
-- **Compact API**: Specialized endpoints provide slim JSON payloads (up to 90% reduction) for fast chart rendering on mobile devices.
+The Pi Solar Monitor is engineered for maximum efficiency on the Raspberry Pi Zero 2 W:
+- **Optimized SQLite**: Uses Write-Ahead Logging (WAL), `PRAGMA synchronous=NORMAL`, and optimized cache sizes for minimal disk I/O latency.
+- **Asynchronous I/O**: Database writes are offloaded to separate threads, ensuring the main event loop remains responsive.
+- **Compact API**: Specialized endpoints provide slim JSON payloads (up to 90% reduction) for fast chart rendering even on low-power mobile devices.
+- **Secure Virtual Metrics**: Formulas are safely pre-validated using Python's `ast` module and evaluated efficiently with cached SQL expressions.
 - **Visual Cues**: Subtle CSS pulsing animations provide real-time connection status without heavy CPU overhead.
 
 ## ⏱️ Quick Start

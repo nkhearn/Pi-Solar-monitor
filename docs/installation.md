@@ -55,14 +55,14 @@ pip install -r requirements.txt
 
 ### 3. Initialize the Database
 
-The system uses **SQLite** to store historical data. Run the initialization script to create the necessary tables.
+The system uses **SQLite** to store historical data, optimized for long-term use on SD cards. Run the initialization script to create the necessary tables and enable Write-Ahead Logging (WAL).
 
 ```bash
 python3 init_db.py
 ```
 
 > [!IMPORTANT]
-> The database stores all historical data indefinitely. Ensure your SD card has sufficient free space for long-term logging.
+> The database stores all historical data indefinitely in `data/inverter_logs.db`. Ensure your SD card has sufficient free space for long-term logging.
 
 ---
 
