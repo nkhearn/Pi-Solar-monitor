@@ -143,16 +143,25 @@ async def collect_now(run_hourly=False, run_daily=False):
     data = await collect_all(run_hourly=run_hourly, run_daily=run_daily)
     if data:
         # Save to DB in a separate thread to avoid blocking the main event loop
-        await asyncio.to_thread(save_to_db, data)
+        db_task = asyncio.to_thread(save_to_db, data)
+
+        # Prepare other notification tasks to run concurrently with the database write
+        notify_tasks = []
+
         # Notify websockets
         if api:
-            await api.notify_new_data({"timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%f'), "data": data})
+            notify_tasks.append(api.notify_new_data({"timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%f'), "data": data}))
         else:
             print("Skipping websocket notification (api not available)")
-        # Send to Macrodroid
-        await send_to_macrodroid(data)
 
-        # Process conditional actions
+        # Send to Macrodroid
+        notify_tasks.append(send_to_macrodroid(data))
+
+        # Run database write and notifications concurrently
+        await asyncio.gather(db_task, *notify_tasks)
+
+        # Process conditional actions AFTER database write completes to avoid race conditions
+        # (e.g. if conditions query the database for the data point we just saved)
         await condition_engine.engine.process_conditions()
 
         print(f"Data saved and broadcasted: {len(data)} keys")

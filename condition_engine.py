@@ -28,6 +28,7 @@ def parse_duration(duration_str):
 class ConditionEngine:
     def __init__(self):
         self.cooldowns = self.load_cooldowns()
+        self._config_cache = {} # filename -> {'mtime': ..., 'config': ...}
 
     def load_cooldowns(self):
         if os.path.exists(COOLDOWN_FILE):
@@ -208,7 +209,18 @@ class ConditionEngine:
             if filename.endswith(".cond"):
                 filepath = os.path.join(cond_dir, filename)
                 try:
-                    config = self.parse_file(filepath)
+                    mtime = os.path.getmtime(filepath)
+                    cached = self._config_cache.get(filename)
+
+                    if cached and cached['mtime'] == mtime:
+                        config = cached['config']
+                    else:
+                        config = self.parse_file(filepath)
+                        self._config_cache[filename] = {
+                            'mtime': mtime,
+                            'config': config
+                        }
+
                     if not config['action']:
                         continue
 
