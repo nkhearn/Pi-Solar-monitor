@@ -121,18 +121,18 @@ def evaluate_formula(formula: str, data: dict):
     Caches compiled code and metric names for performance.
     """
     global _compiled_formulas_cache
-    if formula not in _compiled_formulas_cache:
+    cached = _compiled_formulas_cache.get(formula)
+    if cached is None and formula not in _compiled_formulas_cache:
         if not is_safe_formula(formula):
-            _compiled_formulas_cache[formula] = None
+            cached = None
         else:
             try:
                 metrics = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
                 code = compile(formula, '<string>', 'eval')
-                _compiled_formulas_cache[formula] = (code, metrics)
+                cached = (code, metrics)
             except Exception:
-                _compiled_formulas_cache[formula] = None
-
-    cached = _compiled_formulas_cache[formula]
+                cached = None
+        _compiled_formulas_cache[formula] = cached
     if cached is None:
         return None
 
