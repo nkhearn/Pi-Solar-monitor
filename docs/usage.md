@@ -43,6 +43,24 @@ You can add custom charts to visualize any numeric metric.
 
 ---
 
+## 🧮 Virtual Metrics
+
+Virtual metrics allow you to create new data points by performing calculations on existing ones. They are calculated on the server and are available for charts and the API just like physical metrics.
+
+### ✨ How to Create
+
+1. Click the **🧮 Virtual Metrics** button in the header.
+2. Enter a **Name** for your new metric (e.g., `solar_efficiency`).
+3. Enter a **Formula** (e.g., `pv_power / load_power`).
+4. Click **Add**.
+
+![Virtual Metrics Modal](../screenshots/virtual_metrics_modal.png)
+
+### 🛡️ Security and Efficiency
+Virtual metrics are evaluated safely using Python's `ast` module, preventing arbitrary code execution. For historical queries, formulas are converted to optimized SQLite expressions and cached for maximum performance on the Raspberry Pi Zero 2 W.
+
+---
+
 ## 📲 Automation (Macrodroid)
 
 The system can trigger Macrodroid webhooks on every data collection cycle (every minute), allowing for mobile notifications and complex logic.

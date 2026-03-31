@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 import re
+import ast
 
 DB_PATH = "data/inverter_logs.db"
 
@@ -41,8 +42,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# Simple in-memory cache for virtual metrics
-_virtual_metrics_cache = None
+# Simple in-memory cache for virtual metrics, SQL expressions, and compiled formulas\n_virtual_metrics_cache = None\n_sql_expressions_cache = {}\n_compiled_formulas_cache = {}
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -67,22 +67,64 @@ def get_virtual_metrics_map():
 
 def invalidate_vm_cache():
     global _virtual_metrics_cache
+    global _sql_expressions_cache
     _virtual_metrics_cache = None
+    _sql_expressions_cache = {}
+
+def is_safe_formula(formula: str):
+    """
+    Checks if a formula is safe to evaluate using ast.parse.
+    Only allows basic math and alphanumeric characters.
+    """
+    if not re.match(r'^[a-zA-Z0-9_+*/() \-.]+$', formula):
+        return False
+    if '__' in formula:
+        return False
+    try:
+        root = ast.parse(formula, mode='eval')
+        for node in ast.walk(root):
+            if not isinstance(node, (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Name, ast.Load, ast.Constant,
+                                     ast.Add, ast.Sub, ast.Mult, ast.Div, ast.USub, ast.UAdd)):
+                return False
+            if isinstance(node, ast.Constant) and not isinstance(node.value, (int, float)):
+                return False
+        return True
+    except Exception:
+        return False
 
 def formula_to_sql(formula: str):
     """
     Converts a formula like (m1 + m2) / m3 into a SQLite JSON extraction expression.
-    Only allows alphanumeric, underscores, and basic math operators.
+    Caches results for performance.
     """
+    if formula in _sql_expressions_cache:
+        return _sql_expressions_cache[formula]
+
     metrics = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
     metrics.sort(key=len, reverse=True)
 
     sql_expression = formula
     for m in metrics:
-        # Use single quotes for JSON path to be consistent and safe
         sql_expression = re.sub(r'\b' + re.escape(m) + r'\b', f"CAST(json_extract(data, '$.{m}') AS REAL)", sql_expression)
 
+    _sql_expressions_cache[formula] = sql_expression
     return sql_expression
+
+def evaluate_formula(formula: str, data: dict):
+    """
+    Safely evaluates a virtual metric formula using the provided data.
+    """
+    try:
+        # Extract variables from formula
+        metrics = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
+        # Build local namespace for eval
+        context = {m: float(data.get(m, 0)) for m in metrics}
+        # Use a restricted eval with only necessary operators
+        if is_safe_formula(formula):
+            return eval(formula, {"__builtins__": {}}, context)
+    except Exception:
+        pass
+    return None
 
 @app.get("/api/last")
 async def get_last():
@@ -96,20 +138,7 @@ async def get_last():
         v_metrics = get_virtual_metrics_map()
         if v_metrics:
             for name, formula in v_metrics.items():
-                try:
-                    eval_formula = formula
-                    metrics = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
-                    metrics.sort(key=len, reverse=True)
-                    for m in metrics:
-                        val = data.get(m, 0)
-                        eval_formula = re.sub(r'\b' + re.escape(m) + r'\b', str(val), eval_formula)
-
-                    if re.match(r'^[0-9.+\-*/() ]+$', eval_formula):
-                        data[name] = eval(eval_formula)
-                    else:
-                        data[name] = None
-                except Exception:
-                    data[name] = None
+                data[name] = evaluate_formula(formula, data)
 
         return {"timestamp": row["timestamp"], "data": data}
     return {"error": "No data available"}
@@ -328,7 +357,7 @@ async def get_virtual_metrics():
 
 @app.post("/api/virtual_metrics")
 async def create_virtual_metric(name: str = Body(..., embed=True), formula: str = Body(..., embed=True)):
-    if not re.match(r'^[a-zA-Z0-9_+*/() \-.]+$', formula):
+    if not is_safe_formula(formula):
         raise HTTPException(status_code=400, detail="Invalid formula. Only basic math and alphanumeric characters allowed.")
 
     conn = get_db_connection()
@@ -477,19 +506,7 @@ async def notify_new_data(data_payload):
     if v_metrics:
         data = data_payload["data"]
         for name, formula in v_metrics.items():
-            try:
-                eval_formula = formula
-                metrics = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
-                metrics.sort(key=len, reverse=True)
-                for m in metrics:
-                    val = data.get(m, 0)
-                    eval_formula = re.sub(r'\b' + re.escape(m) + r'\b', str(val), eval_formula)
-                if re.match(r'^[0-9.+\-*/() ]+$', eval_formula):
-                    data[name] = eval(eval_formula)
-                else:
-                    data[name] = None
-            except Exception:
-                data[name] = None
+            data[name] = evaluate_formula(formula, data)
 
     message = json.dumps({"type": "new_data", "payload": data_payload})
     await manager.broadcast(message)
