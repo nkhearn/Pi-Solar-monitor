@@ -149,7 +149,9 @@ Returns a single specific statistic for a key.
   - **Code**: 200
   - **Content**:
     ```json
-    12.5
+    {
+        "value": 12.5
+    }
     ```
 
 ---
