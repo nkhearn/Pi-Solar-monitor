@@ -142,20 +142,26 @@ async def collect_now(run_hourly=False, run_daily=False):
     print(f"Collecting data at {datetime.now()} (hourly={run_hourly}, daily={run_daily})")
     data = await collect_all(run_hourly=run_hourly, run_daily=run_daily)
     if data:
+        # Pass copies of data to avoid race conditions and data leakage between tasks.
+        # api.notify_new_data modifies its input dictionary to add virtual metrics.
+
         # Save to DB in a separate thread to avoid blocking the main event loop
-        db_task = asyncio.to_thread(save_to_db, data)
+        db_task = asyncio.to_thread(save_to_db, data.copy())
 
         # Prepare other notification tasks to run concurrently with the database write
         notify_tasks = []
 
         # Notify websockets
         if api:
-            notify_tasks.append(api.notify_new_data({"timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%f'), "data": data}))
+            notify_tasks.append(api.notify_new_data({
+                "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%f'),
+                "data": data.copy()
+            }))
         else:
             print("Skipping websocket notification (api not available)")
 
         # Send to Macrodroid
-        notify_tasks.append(send_to_macrodroid(data))
+        notify_tasks.append(send_to_macrodroid(data.copy()))
 
         # Run database write and notifications concurrently
         await asyncio.gather(db_task, *notify_tasks)
