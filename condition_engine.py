@@ -57,7 +57,7 @@ class ConditionEngine:
             print(f"Purged {before_count - len(self.cooldowns)} old cooldown entries.")
             self.save_cooldowns()
 
-    async def evaluate_path(self, path):
+    async def evaluate_path(self, path, current_data=None):
         """
         Evaluates an internal API path and returns the value.
         Example paths:
@@ -84,6 +84,9 @@ class ConditionEngine:
             metric = parts[3]
 
             if metric == 'last':
+                # Optimization: if current_data is provided, use it instead of querying DB
+                if current_data and key in current_data:
+                    return current_data[key]
                 res = await api.get_data_last(key)
                 return res.get('value')
             elif metric == 'stats' and len(parts) >= 5:
@@ -101,7 +104,7 @@ class ConditionEngine:
             print(f"Error evaluating path {path}: {e}")
         return None
 
-    async def process_expression(self, expr):
+    async def process_expression(self, expr, current_data=None):
         """
         Substitutes API paths in an expression with their values and evaluates it.
         """
@@ -116,7 +119,7 @@ class ConditionEngine:
 
         # Sort paths by length descending to avoid partial replacement issues
         for path in sorted(set(paths), key=len, reverse=True):
-            val = await self.evaluate_path(path)
+            val = await self.evaluate_path(path, current_data=current_data)
             if val is None:
                 raise ValueError(f"Data not available for {path}")
 
@@ -200,7 +203,7 @@ class ConditionEngine:
 
         return config
 
-    async def process_conditions(self):
+    async def process_conditions(self, current_data=None):
         cond_dir = "conditions"
         if not os.path.exists(cond_dir):
             return
@@ -236,7 +239,7 @@ class ConditionEngine:
                         or_passed = False
                         for expr in config['or']:
                             try:
-                                if await self.process_expression(expr):
+                                if await self.process_expression(expr, current_data=current_data):
                                     or_passed = True
                                     break
                             except Exception as e:
@@ -247,7 +250,7 @@ class ConditionEngine:
                     if config['and']:
                         for expr in config['and']:
                             try:
-                                if not await self.process_expression(expr):
+                                if not await self.process_expression(expr, current_data=current_data):
                                     and_passed = False
                                     break
                             except Exception as e:

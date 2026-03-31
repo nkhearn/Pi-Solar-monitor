@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import asyncio
+import threading
 from typing import List, Optional, Any, Dict
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Body
 from fastapi.staticfiles import StaticFiles
@@ -10,6 +11,12 @@ import re
 import ast
 
 DB_PATH = "data/inverter_logs.db"
+
+# Shared persistent database connection for the API process
+# Use check_same_thread=False to allow multiple concurrent requests to use the same connection
+# SQLite's WAL mode and our PRAGMA settings handle concurrency safely
+_db_conn = None
+_db_lock = threading.Lock()
 
 app = FastAPI()
 
@@ -48,23 +55,29 @@ _sql_expressions_cache = {}
 _compiled_formulas_cache = {}
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    # Performance optimizations for SQLite (WAL is already set at DB init)
-    conn.execute('PRAGMA synchronous=NORMAL')
-    conn.execute('PRAGMA cache_size=-10000')  # 10MB cache for faster lookups
-    return conn
+    global _db_conn
+    if _db_conn is None:
+        with _db_lock:
+            if _db_conn is None:
+                _db_conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+                _db_conn.row_factory = sqlite3.Row
+                # Performance optimizations for SQLite (WAL is already set at DB init)
+                _db_conn.execute('PRAGMA synchronous=NORMAL')
+                _db_conn.execute('PRAGMA cache_size=-10000')  # 10MB cache for faster lookups
+    return _db_conn
 
-def get_virtual_metrics_map():
+def _get_virtual_metrics_from_db():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT name, formula FROM virtual_metrics')
+    return cursor.fetchall()
+
+async def get_virtual_metrics_map():
     global _virtual_metrics_cache
     if _virtual_metrics_cache is not None:
         return _virtual_metrics_cache
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT name, formula FROM virtual_metrics')
-    rows = cursor.fetchall()
-    conn.close()
+    rows = await asyncio.to_thread(_get_virtual_metrics_from_db)
     _virtual_metrics_cache = {row['name']: row['formula'] for row in rows}
     return _virtual_metrics_cache
 
@@ -145,16 +158,18 @@ def evaluate_formula(formula: str, data: dict):
         pass
     return None
 
-@app.get("/api/last")
-async def get_last():
+def _get_last_from_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM data_points ORDER BY timestamp DESC LIMIT 1')
-    row = cursor.fetchone()
-    conn.close()
+    return cursor.fetchone()
+
+@app.get("/api/last")
+async def get_last():
+    row = await asyncio.to_thread(_get_last_from_db)
     if row:
         data = json.loads(row["data"])
-        v_metrics = get_virtual_metrics_map()
+        v_metrics = await get_virtual_metrics_map()
         if v_metrics:
             for name, formula in v_metrics.items():
                 data[name] = evaluate_formula(formula, data)
@@ -162,8 +177,7 @@ async def get_last():
         return {"timestamp": row["timestamp"], "data": data}
     return {"error": "No data available"}
 
-@app.get("/api/keys")
-async def get_keys():
+def _get_keys_from_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     query = """
@@ -172,18 +186,27 @@ async def get_keys():
     WHERE data_points.id IN (SELECT id FROM data_points ORDER BY timestamp DESC LIMIT 100)
     """
     cursor.execute(query)
-    rows = cursor.fetchall()
+    return cursor.fetchall()
+
+@app.get("/api/keys")
+async def get_keys():
+    rows = await asyncio.to_thread(_get_keys_from_db)
     keys = [row[0] for row in rows]
 
-    v_metrics = get_virtual_metrics_map()
+    v_metrics = await get_virtual_metrics_map()
     keys.extend(v_metrics.keys())
 
-    conn.close()
     return sorted(list(set(keys)))
+
+def _execute_query_one(query, params):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    return cursor.fetchone()
 
 @app.get("/api/data/{key}/last")
 async def get_data_last(key: str):
-    v_metrics = get_virtual_metrics_map()
+    v_metrics = await get_virtual_metrics_map()
     if key in v_metrics:
         sql_expr = formula_to_sql(v_metrics[key])
         query = f"SELECT timestamp, {sql_expr} as value FROM data_points WHERE {sql_expr} IS NOT NULL ORDER BY timestamp DESC LIMIT 1"
@@ -193,19 +216,20 @@ async def get_data_last(key: str):
         query = "SELECT timestamp, json_extract(data, ?) as value FROM data_points WHERE json_extract(data, ?) IS NOT NULL ORDER BY timestamp DESC LIMIT 1"
         params = [f"$.{key}", f"$.{key}"]
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute(query, params)
-        row = cursor.fetchone()
+        row = await asyncio.to_thread(_execute_query_one, query, params)
     except sqlite3.OperationalError as e:
-        conn.close()
         raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
-    conn.close()
 
     if row:
         return {"timestamp": row["timestamp"], "value": row["value"]}
     return {"timestamp": None, "value": None}
+
+def _execute_query_all(query, params):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    return cursor.fetchall()
 
 @app.get("/api/data/{key}/history")
 async def get_data_history(
@@ -217,17 +241,13 @@ async def get_data_history(
     eq: Optional[float] = Query(None),
     limit: int = Query(100)
 ):
-    query, params = build_data_query(key, start, end, gt, lt, eq, limit)
+    v_metrics = await get_virtual_metrics_map()
+    query, params = build_data_query(key, v_metrics, start, end, gt, lt, eq, limit)
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
+        rows = await asyncio.to_thread(_execute_query_all, query, params)
     except sqlite3.OperationalError as e:
-        conn.close()
         raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
-    conn.close()
 
     return [[row["timestamp"], row["value"]] for row in rows]
 
@@ -240,7 +260,7 @@ async def get_data_stats(
     lt: Optional[float] = Query(None),
     eq: Optional[float] = Query(None)
 ):
-    v_metrics = get_virtual_metrics_map()
+    v_metrics = await get_virtual_metrics_map()
     params = []
     if key in v_metrics:
         sql_expr = formula_to_sql(v_metrics[key])
@@ -297,15 +317,10 @@ async def get_data_stats(
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute(query, params)
-        row = cursor.fetchone()
+        row = await asyncio.to_thread(_execute_query_one, query, params)
     except sqlite3.OperationalError as e:
-        conn.close()
         raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
-    conn.close()
 
     if row:
         return {
@@ -331,24 +346,18 @@ async def get_data_single_stat(
     if stat_key not in valid_stats:
         raise HTTPException(status_code=400, detail=f"Invalid stat_key: {stat_key}. Available: avg, min, max, sum, count")
 
-    query, params = build_data_query(key, start, end, gt, lt, eq, aggregate=stat_key)
+    v_metrics = await get_virtual_metrics_map()
+    query, params = build_data_query(key, v_metrics, start, end, gt, lt, eq, aggregate=stat_key)
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute(query, params)
-        row = cursor.fetchone()
+        row = await asyncio.to_thread(_execute_query_one, query, params)
     except sqlite3.OperationalError as e:
-        conn.close()
         raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
-    conn.close()
 
     return {"value": row["value"]}
 
 @app.get("/api/history")
 async def get_history(start: Optional[str] = Query(None), end: Optional[str] = Query(None), limit: int = Query(100)):
-    conn = get_db_connection()
-    cursor = conn.cursor()
     query = 'SELECT * FROM data_points'
     params = []
     conditions = []
@@ -364,65 +373,70 @@ async def get_history(start: Optional[str] = Query(None), end: Optional[str] = Q
         query += ' WHERE ' + ' AND '.join(conditions)
     query += ' ORDER BY timestamp DESC LIMIT ?'
     params.append(limit)
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
+
+    rows = await asyncio.to_thread(_execute_query_all, query, params)
     return [{"timestamp": row["timestamp"], "data": json.loads(row["data"])} for row in rows]
 
 @app.get("/api/virtual_metrics")
 async def get_virtual_metrics():
-    v_metrics = get_virtual_metrics_map()
+    v_metrics = await get_virtual_metrics_map()
     return [{"name": k, "formula": v} for k, v in v_metrics.items()]
+
+def _save_virtual_metric(name, formula):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR REPLACE INTO virtual_metrics (name, formula) VALUES (?, ?)', (name, formula))
+    conn.commit()
 
 @app.post("/api/virtual_metrics")
 async def create_virtual_metric(name: str = Body(..., embed=True), formula: str = Body(..., embed=True)):
     if not is_safe_formula(formula):
         raise HTTPException(status_code=400, detail="Invalid formula. Only basic math and alphanumeric characters allowed.")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute('INSERT OR REPLACE INTO virtual_metrics (name, formula) VALUES (?, ?)', (name, formula))
-        conn.commit()
+        await asyncio.to_thread(_save_virtual_metric, name, formula)
         invalidate_vm_cache()
     except sqlite3.Error as e:
-        conn.close()
         raise HTTPException(status_code=500, detail=str(e))
-    conn.close()
     return {"status": "success"}
 
-@app.delete("/api/virtual_metrics/{name}")
-async def delete_virtual_metric(name: str):
+def _delete_virtual_metric(name):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('DELETE FROM virtual_metrics WHERE name = ?', (name,))
     conn.commit()
-    conn.close()
+
+@app.delete("/api/virtual_metrics/{name}")
+async def delete_virtual_metric(name: str):
+    await asyncio.to_thread(_delete_virtual_metric, name)
     invalidate_vm_cache()
     return {"status": "success"}
 
-@app.get("/api/charts")
-async def get_charts():
+def _get_charts_from_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM dashboard_charts')
-    rows = cursor.fetchall()
-    conn.close()
+    return cursor.fetchall()
+
+@app.get("/api/charts")
+async def get_charts():
+    rows = await asyncio.to_thread(_get_charts_from_db)
     return [json.loads(row['config']) for row in rows]
+
+def _save_charts_to_db(charts):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM dashboard_charts')
+    for chart in charts:
+        cursor.execute('INSERT INTO dashboard_charts (id, config) VALUES (?, ?)', (chart['id'], json.dumps(chart)))
+    conn.commit()
 
 @app.post("/api/charts")
 async def save_charts(charts: List[Dict] = Body(...)):
-    conn = get_db_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute('DELETE FROM dashboard_charts')
-        for chart in charts:
-            cursor.execute('INSERT INTO dashboard_charts (id, config) VALUES (?, ?)', (chart['id'], json.dumps(chart)))
-        conn.commit()
+        await asyncio.to_thread(_save_charts_to_db, charts)
     except sqlite3.Error as e:
-        conn.close()
         raise HTTPException(status_code=500, detail=str(e))
-    conn.close()
     return {"status": "success"}
 
 @app.websocket("/ws")
@@ -452,6 +466,7 @@ def parse_relative_time(time_str: str) -> str:
 
 def build_data_query(
     key: str,
+    v_metrics: Dict[str, str],
     start: Optional[str] = None,
     end: Optional[str] = None,
     gt: Optional[float] = None,
@@ -460,7 +475,6 @@ def build_data_query(
     limit: int = 100,
     aggregate: Optional[str] = None
 ):
-    v_metrics = get_virtual_metrics_map()
     params = []
     if key in v_metrics:
         sql_expr = formula_to_sql(v_metrics[key])
@@ -521,7 +535,7 @@ def build_data_query(
     return query, params
 
 async def notify_new_data(data_payload):
-    v_metrics = get_virtual_metrics_map()
+    v_metrics = await get_virtual_metrics_map()
     if v_metrics:
         # Create a copy of the payload to avoid side effects on the input
         data_payload = data_payload.copy()
