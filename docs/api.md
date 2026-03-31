@@ -133,6 +133,29 @@ Returns aggregate statistics for a key over a period.
 
 ---
 
+### `GET` /api/data/{key}/stats/{stat_key}
+Returns a single specific statistic for a key.
+
+- **URL Parameters**:
+    - `stat_key`: The statistic to return. Available: `avg`, `min`, `max`, `sum`, `count`.
+
+- **Query Parameters**:
+    - `start`, `end` (optional): Time range. Example: `24h` for the last 24 hours.
+    - `gt`, `lt`, `eq` (optional): Value filters.
+
+- **Example**: `/api/data/battery_voltage/stats/avg?start=24h`
+
+- **Success Response**:
+  - **Code**: 200
+  - **Content**:
+    ```json
+    {
+        "value": 12.5
+    }
+    ```
+
+---
+
 ## ⏲️ Time Filtering Format
 
 The `start` and `end` parameters support:
