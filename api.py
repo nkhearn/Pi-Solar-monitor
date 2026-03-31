@@ -2,7 +2,7 @@ import sqlite3
 import json
 import asyncio
 from typing import List, Optional, Any, Dict
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
@@ -41,6 +41,9 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# Simple in-memory cache for virtual metrics
+_virtual_metrics_cache = None
+
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -48,6 +51,38 @@ def get_db_connection():
     conn.execute('PRAGMA synchronous=NORMAL')
     conn.execute('PRAGMA cache_size=-10000')  # 10MB cache for faster lookups
     return conn
+
+def get_virtual_metrics_map():
+    global _virtual_metrics_cache
+    if _virtual_metrics_cache is not None:
+        return _virtual_metrics_cache
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT name, formula FROM virtual_metrics')
+    rows = cursor.fetchall()
+    conn.close()
+    _virtual_metrics_cache = {row['name']: row['formula'] for row in rows}
+    return _virtual_metrics_cache
+
+def invalidate_vm_cache():
+    global _virtual_metrics_cache
+    _virtual_metrics_cache = None
+
+def formula_to_sql(formula: str):
+    """
+    Converts a formula like (m1 + m2) / m3 into a SQLite JSON extraction expression.
+    Only allows alphanumeric, underscores, and basic math operators.
+    """
+    metrics = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
+    metrics.sort(key=len, reverse=True)
+
+    sql_expression = formula
+    for m in metrics:
+        # Use single quotes for JSON path to be consistent and safe
+        sql_expression = re.sub(r'\b' + re.escape(m) + r'\b', f"CAST(json_extract(data, '$.{m}') AS REAL)", sql_expression)
+
+    return sql_expression
 
 @app.get("/api/last")
 async def get_last():
@@ -57,19 +92,32 @@ async def get_last():
     row = cursor.fetchone()
     conn.close()
     if row:
-        return {"timestamp": row["timestamp"], "data": json.loads(row["data"])}
+        data = json.loads(row["data"])
+        v_metrics = get_virtual_metrics_map()
+        if v_metrics:
+            for name, formula in v_metrics.items():
+                try:
+                    eval_formula = formula
+                    metrics = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
+                    metrics.sort(key=len, reverse=True)
+                    for m in metrics:
+                        val = data.get(m, 0)
+                        eval_formula = re.sub(r'\b' + re.escape(m) + r'\b', str(val), eval_formula)
+
+                    if re.match(r'^[0-9.+\-*/() ]+$', eval_formula):
+                        data[name] = eval(eval_formula)
+                    else:
+                        data[name] = None
+                except Exception:
+                    data[name] = None
+
+        return {"timestamp": row["timestamp"], "data": data}
     return {"error": "No data available"}
 
 @app.get("/api/keys")
 async def get_keys():
-    """
-    Returns a list of all unique keys in the last 100 records.
-    Uses SQLite's json_each for more efficient key extraction directly in the database.
-    """
     conn = get_db_connection()
     cursor = conn.cursor()
-
-    # Use json_each to find unique keys within the last 100 records
     query = """
     SELECT DISTINCT json_each.key
     FROM data_points, json_each(data_points.data)
@@ -77,21 +125,34 @@ async def get_keys():
     """
     cursor.execute(query)
     rows = cursor.fetchall()
-    conn.close()
-
     keys = [row[0] for row in rows]
-    return sorted(keys)
+
+    v_metrics = get_virtual_metrics_map()
+    keys.extend(v_metrics.keys())
+
+    conn.close()
+    return sorted(list(set(keys)))
 
 @app.get("/api/data/{key}/last")
 async def get_data_last(key: str):
+    v_metrics = get_virtual_metrics_map()
+    if key in v_metrics:
+        sql_expr = formula_to_sql(v_metrics[key])
+        query = f"SELECT timestamp, {sql_expr} as value FROM data_points WHERE {sql_expr} IS NOT NULL ORDER BY timestamp DESC LIMIT 1"
+        params = []
+    else:
+        # Restore parameter substitution for JSON path to prevent SQL injection
+        query = "SELECT timestamp, json_extract(data, ?) as value FROM data_points WHERE json_extract(data, ?) IS NOT NULL ORDER BY timestamp DESC LIMIT 1"
+        params = [f"$.{key}", f"$.{key}"]
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    # Find the most recent record where this key is present
-    # Using parameter substitution for JSON path to prevent SQL injection
-    json_path = f"$.{key}"
-    query = "SELECT timestamp, json_extract(data, ?) as value FROM data_points WHERE json_extract(data, ?) IS NOT NULL ORDER BY timestamp DESC LIMIT 1"
-    cursor.execute(query, (json_path, json_path))
-    row = cursor.fetchone()
+    try:
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+    except sqlite3.OperationalError as e:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
     conn.close()
 
     if row:
@@ -112,8 +173,12 @@ async def get_data_history(
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
+    try:
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+    except sqlite3.OperationalError as e:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
     conn.close()
 
     return [[row["timestamp"], row["value"]] for row in rows]
@@ -127,17 +192,21 @@ async def get_data_stats(
     lt: Optional[float] = Query(None),
     eq: Optional[float] = Query(None)
 ):
-    # Perform all aggregations in a single efficient query
-    json_path = f"$.{key}"
+    v_metrics = get_virtual_metrics_map()
+    params = []
+    if key in v_metrics:
+        sql_expr = formula_to_sql(v_metrics[key])
+    else:
+        sql_expr = "json_extract(data, ?)"
+        params.extend([f"$.{key}"] * 5) # For the 5 aggregations
 
     select_clause = (
-        "AVG(json_extract(data, ?)) as avg, "
-        "MIN(json_extract(data, ?)) as min, "
-        "MAX(json_extract(data, ?)) as max, "
-        "SUM(json_extract(data, ?)) as sum, "
-        "COUNT(json_extract(data, ?)) as count"
+        f"AVG({sql_expr}) as avg, "
+        f"MIN({sql_expr}) as min, "
+        f"MAX({sql_expr}) as max, "
+        f"SUM({sql_expr}) as sum, "
+        f"COUNT({sql_expr}) as count"
     )
-    params = [json_path] * 5
 
     query = f"SELECT {select_clause} FROM data_points"
 
@@ -154,22 +223,40 @@ async def get_data_stats(
         params.append(end_ts)
 
     if gt is not None:
-        conditions.append("json_extract(data, ?) > ?")
-        params.extend([json_path, gt])
+        if key in v_metrics:
+            conditions.append(f"{sql_expr} > ?")
+        else:
+            conditions.append("json_extract(data, ?) > ?")
+            params.append(f"$.{key}")
+        params.append(gt)
+
     if lt is not None:
-        conditions.append("json_extract(data, ?) < ?")
-        params.extend([json_path, lt])
+        if key in v_metrics:
+            conditions.append(f"{sql_expr} < ?")
+        else:
+            conditions.append("json_extract(data, ?) < ?")
+            params.append(f"$.{key}")
+        params.append(lt)
+
     if eq is not None:
-        conditions.append("json_extract(data, ?) = ?")
-        params.extend([json_path, eq])
+        if key in v_metrics:
+            conditions.append(f"{sql_expr} = ?")
+        else:
+            conditions.append("json_extract(data, ?) = ?")
+            params.append(f"$.{key}")
+        params.append(eq)
 
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(query, params)
-    row = cursor.fetchone()
+    try:
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+    except sqlite3.OperationalError as e:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
     conn.close()
 
     if row:
@@ -192,10 +279,6 @@ async def get_data_single_stat(
     lt: Optional[float] = Query(None),
     eq: Optional[float] = Query(None)
 ):
-    """
-    Returns a specific statistic for a key.
-    Available stat_key: avg, min, max, sum, count.
-    """
     valid_stats = {"avg", "min", "max", "sum", "count"}
     if stat_key not in valid_stats:
         raise HTTPException(status_code=400, detail=f"Invalid stat_key: {stat_key}. Available: avg, min, max, sum, count")
@@ -204,8 +287,12 @@ async def get_data_single_stat(
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(query, params)
-    row = cursor.fetchone()
+    try:
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+    except sqlite3.OperationalError as e:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
     conn.close()
 
     return {"value": row["value"]}
@@ -214,70 +301,105 @@ async def get_data_single_stat(
 async def get_history(start: Optional[str] = Query(None), end: Optional[str] = Query(None), limit: int = Query(100)):
     conn = get_db_connection()
     cursor = conn.cursor()
-
     query = 'SELECT * FROM data_points'
     params = []
-
     conditions = []
     start_ts = parse_relative_time(start)
     if start_ts:
         conditions.append('timestamp >= ?')
         params.append(start_ts)
-
     end_ts = parse_relative_time(end)
     if end_ts:
         conditions.append('timestamp <= ?')
         params.append(end_ts)
-
     if conditions:
         query += ' WHERE ' + ' AND '.join(conditions)
-
     query += ' ORDER BY timestamp DESC LIMIT ?'
     params.append(limit)
-
     cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
-
     return [{"timestamp": row["timestamp"], "data": json.loads(row["data"])} for row in rows]
+
+@app.get("/api/virtual_metrics")
+async def get_virtual_metrics():
+    v_metrics = get_virtual_metrics_map()
+    return [{"name": k, "formula": v} for k, v in v_metrics.items()]
+
+@app.post("/api/virtual_metrics")
+async def create_virtual_metric(name: str = Body(..., embed=True), formula: str = Body(..., embed=True)):
+    if not re.match(r'^[a-zA-Z0-9_+*/() \-.]+$', formula):
+        raise HTTPException(status_code=400, detail="Invalid formula. Only basic math and alphanumeric characters allowed.")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('INSERT OR REPLACE INTO virtual_metrics (name, formula) VALUES (?, ?)', (name, formula))
+        conn.commit()
+        invalidate_vm_cache()
+    except sqlite3.Error as e:
+        conn.close()
+        raise HTTPException(status_code=500, detail=str(e))
+    conn.close()
+    return {"status": "success"}
+
+@app.delete("/api/virtual_metrics/{name}")
+async def delete_virtual_metric(name: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM virtual_metrics WHERE name = ?', (name,))
+    conn.commit()
+    conn.close()
+    invalidate_vm_cache()
+    return {"status": "success"}
+
+@app.get("/api/charts")
+async def get_charts():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM dashboard_charts')
+    rows = cursor.fetchall()
+    conn.close()
+    return [json.loads(row['config']) for row in rows]
+
+@app.post("/api/charts")
+async def save_charts(charts: List[Dict] = Body(...)):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('DELETE FROM dashboard_charts')
+        for chart in charts:
+            cursor.execute('INSERT INTO dashboard_charts (id, config) VALUES (?, ?)', (chart['id'], json.dumps(chart)))
+        conn.commit()
+    except sqlite3.Error as e:
+        conn.close()
+        raise HTTPException(status_code=500, detail=str(e))
+    conn.close()
+    return {"status": "success"}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            # We don't expect messages from client, but we need to keep the connection alive
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
 def parse_relative_time(time_str: str) -> str:
-    """
-    Parses a relative time string (e.g., '1h', '24h', '1d', 'today') or an ISO timestamp.
-    Returns an ISO-formatted string suitable for SQLite comparison.
-    """
     if not time_str:
         return None
-
     if time_str.lower() == "today":
         return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%f')
-
     match = re.match(r'^(\d+)([smhd])$', time_str.lower())
     if match:
         value, unit = match.groups()
         value = int(value)
-        if unit == 's':
-            delta = timedelta(seconds=value)
-        elif unit == 'm':
-            delta = timedelta(minutes=value)
-        elif unit == 'h':
-            delta = timedelta(hours=value)
-        elif unit == 'd':
-            delta = timedelta(days=value)
-
+        if unit == 's': delta = timedelta(seconds=value)
+        elif unit == 'm': delta = timedelta(minutes=value)
+        elif unit == 'h': delta = timedelta(hours=value)
+        elif unit == 'd': delta = timedelta(days=value)
         return (datetime.now() - delta).strftime('%Y-%m-%d %H:%M:%f')
-
-    # Just return as is for SQLite to handle (ISO timestamp or other)
     return time_str
 
 def build_data_query(
@@ -290,54 +412,56 @@ def build_data_query(
     limit: int = 100,
     aggregate: Optional[str] = None
 ):
-    """
-    Builds a dynamic SQLite query to extract a specific key from the JSON data.
-    Uses parameter substitution for JSON path to prevent SQL injection.
-    """
+    v_metrics = get_virtual_metrics_map()
     params = []
-    json_path = f"$.{key}"
+    if key in v_metrics:
+        sql_expr = formula_to_sql(v_metrics[key])
+    else:
+        sql_expr = "json_extract(data, ?)"
+        params.append(f"$.{key}")
 
     if aggregate:
-        if aggregate == "avg":
-            select_clause = "AVG(json_extract(data, ?)) as value"
-        elif aggregate == "min":
-            select_clause = "MIN(json_extract(data, ?)) as value"
-        elif aggregate == "max":
-            select_clause = "MAX(json_extract(data, ?)) as value"
-        elif aggregate == "sum":
-            select_clause = "SUM(json_extract(data, ?)) as value"
-        elif aggregate == "count":
-            select_clause = "COUNT(json_extract(data, ?)) as value"
-        else:
-            raise HTTPException(status_code=400, detail=f"Invalid aggregate function: {aggregate}")
-
+        if aggregate == "avg": select_clause = f"AVG({sql_expr}) as value"
+        elif aggregate == "min": select_clause = f"MIN({sql_expr}) as value"
+        elif aggregate == "max": select_clause = f"MAX({sql_expr}) as value"
+        elif aggregate == "sum": select_clause = f"SUM({sql_expr}) as value"
+        elif aggregate == "count": select_clause = f"COUNT({sql_expr}) as value"
+        else: raise HTTPException(status_code=400, detail=f"Invalid aggregate function: {aggregate}")
         query = f"SELECT {select_clause} FROM data_points"
-        params.append(json_path)
     else:
-        query = "SELECT timestamp, json_extract(data, ?) as value FROM data_points"
-        params.append(json_path)
+        query = f"SELECT timestamp, {sql_expr} as value FROM data_points"
 
     conditions = []
-
     start_ts = parse_relative_time(start)
     if start_ts:
         conditions.append("timestamp >= ?")
         params.append(start_ts)
-
     end_ts = parse_relative_time(end)
     if end_ts:
         conditions.append("timestamp <= ?")
         params.append(end_ts)
 
     if gt is not None:
-        conditions.append("json_extract(data, ?) > ?")
-        params.extend([json_path, gt])
+        if key in v_metrics:
+            conditions.append(f"{sql_expr} > ?")
+        else:
+            conditions.append("json_extract(data, ?) > ?")
+            params.append(f"$.{key}")
+        params.append(gt)
     if lt is not None:
-        conditions.append("json_extract(data, ?) < ?")
-        params.extend([json_path, lt])
+        if key in v_metrics:
+            conditions.append(f"{sql_expr} < ?")
+        else:
+            conditions.append("json_extract(data, ?) < ?")
+            params.append(f"$.{key}")
+        params.append(lt)
     if eq is not None:
-        conditions.append("json_extract(data, ?) = ?")
-        params.extend([json_path, eq])
+        if key in v_metrics:
+            conditions.append(f"{sql_expr} = ?")
+        else:
+            conditions.append("json_extract(data, ?) = ?")
+            params.append(f"$.{key}")
+        params.append(eq)
 
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
@@ -348,10 +472,26 @@ def build_data_query(
 
     return query, params
 
-# Helper function to be called by the engine
-async def notify_new_data(data):
-    message = json.dumps({"type": "new_data", "payload": data})
+async def notify_new_data(data_payload):
+    v_metrics = get_virtual_metrics_map()
+    if v_metrics:
+        data = data_payload["data"]
+        for name, formula in v_metrics.items():
+            try:
+                eval_formula = formula
+                metrics = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
+                metrics.sort(key=len, reverse=True)
+                for m in metrics:
+                    val = data.get(m, 0)
+                    eval_formula = re.sub(r'\b' + re.escape(m) + r'\b', str(val), eval_formula)
+                if re.match(r'^[0-9.+\-*/() ]+$', eval_formula):
+                    data[name] = eval(eval_formula)
+                else:
+                    data[name] = None
+            except Exception:
+                data[name] = None
+
+    message = json.dumps({"type": "new_data", "payload": data_payload})
     await manager.broadcast(message)
 
-# Serve static files for the dashboard
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
