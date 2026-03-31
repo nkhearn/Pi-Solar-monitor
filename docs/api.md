@@ -10,7 +10,7 @@ The **Pi Solar Monitor** provides a comprehensive REST API for accessing latest 
 ## 🌍 Global Endpoints
 
 ### `GET` /api/last
-Returns the most recent aggregated data point.
+Returns the most recent aggregated data point, including any defined virtual metrics.
 
 - **Success Response**:
   - **Code**: 200
@@ -19,8 +19,9 @@ Returns the most recent aggregated data point.
     {
         "timestamp": "2026-03-17 15:44:01.031",
         "data": {
-            "inverter_error": "[Errno 2] No such file or directory: '/home/pi/.local/bin/mpp-solar'",
-            "solar_prediction": 1523.08
+            "pv_power": 500,
+            "load": 200,
+            "efficiency": 2.5
         }
     }
     ```
@@ -54,7 +55,7 @@ Returns a list of recent aggregated data points.
 ---
 
 ### `GET` /api/keys
-Returns a list of all unique data keys found in recent records.
+Returns a list of all unique data keys found in recent records, plus all defined virtual metrics.
 
 - **Success Response**:
   - **Code**: 200
@@ -64,6 +65,7 @@ Returns a list of all unique data keys found in recent records.
         "ac_input_voltage",
         "battery_voltage",
         "solar_prediction",
+        "efficiency",
         "water_in",
         "water_out"
     ]
@@ -73,7 +75,7 @@ Returns a list of all unique data keys found in recent records.
 
 ## 📈 Data-Specific Endpoints
 
-These endpoints focus on a single metric (key) within the data.
+These endpoints focus on a single metric (key) within the data. They support both physical and virtual metrics.
 
 ### `GET` /api/data/{key}/last
 Returns the most recent value for a specific key.
@@ -152,6 +154,85 @@ Returns a single specific statistic for a key.
     {
         "value": 12.5
     }
+    ```
+
+---
+
+## 🧮 Virtual Metric Management Endpoints
+
+### `GET` /api/virtual_metrics
+Returns all defined virtual metrics and their formulas.
+
+- **Success Response**:
+  - **Code**: 200
+  - **Content**:
+    ```json
+    [
+        {"name": "efficiency", "formula": "pv_power / load"},
+        {"name": "total_input", "formula": "pv_power + grid_power"}
+    ]
+    ```
+
+---
+
+### `POST` /api/virtual_metrics
+Creates or updates a virtual metric.
+
+- **Request Body**:
+    ```json
+    {
+        "name": "efficiency",
+        "formula": "pv_power / load"
+    }
+    ```
+
+---
+
+### `DELETE` /api/virtual_metrics/{name}
+Deletes a virtual metric.
+
+- **Success Response**:
+  - **Code**: 200
+  - **Content**: `{"status": "success"}`
+
+---
+
+## 📊 Dashboard Chart Endpoints
+
+### `GET` /api/charts
+Returns the persistent dashboard chart configuration.
+
+- **Success Response**:
+  - **Code**: 200
+  - **Content**:
+    ```json
+    [
+        {
+            "id": "1710712345678",
+            "title": "Solar Power",
+            "metric": "pv_power",
+            "type": "line",
+            "range": "1h"
+        }
+    ]
+    ```
+
+---
+
+### `POST` /api/charts
+Saves the dashboard chart configuration. Overwrites existing configuration.
+
+- **Request Body**:
+    ```json
+    [
+        {
+            "id": "1710712345678",
+            "title": "Solar Power",
+            "metric": "pv_power",
+            "type": "line",
+            "range": "1h"
+        }
+    ]
     ```
 
 ---

@@ -17,6 +17,22 @@ def init_db():
     # Index for faster time-range queries
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON data_points(timestamp)')
 
+    # Table for virtual metrics
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS virtual_metrics (
+            name TEXT PRIMARY KEY,
+            formula TEXT NOT NULL
+        )
+    ''')
+
+    # Table for dashboard configuration (charts)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS dashboard_charts (
+            id TEXT PRIMARY KEY,
+            config TEXT NOT NULL
+        )
+    ''')
+
     # Enable Write-Ahead Logging for better concurrency and performance
     cursor.execute('PRAGMA journal_mode=WAL')
 

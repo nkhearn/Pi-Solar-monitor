@@ -255,6 +255,20 @@
         }
 
         .hidden { display: none; }
+
+        #virtual-metrics-list {
+            margin-bottom: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .vm-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .vm-item:last-child { border-bottom: none; }
     </style>
 </head>
 <body>
@@ -262,6 +276,7 @@
         <header>
             <h1>Solar Monitor</h1>
             <div class="controls">
+                <button id="manageVMBtn" class="btn">🧮 Virtual Metrics</button>
                 <button id="themeToggle" class="btn" aria-label="Toggle dark mode">🌙 Dark Mode</button>
                 <div id="status" class="status disconnected" aria-live="polite">Connecting...</div>
             </div>
@@ -279,6 +294,10 @@
             <div id="section-temp" class="hidden">
                 <div class="section-title">Temperature</div>
                 <div class="grid" id="metrics-temp"></div>
+            </div>
+            <div id="section-virtual" class="hidden">
+                <div class="section-title">Virtual Metrics</div>
+                <div class="grid" id="metrics-virtual"></div>
             </div>
             <div id="section-other" class="hidden">
                 <div class="section-title">Other</div>
@@ -325,6 +344,28 @@
         </div>
     </div>
 
+    <!-- Manage Virtual Metrics Modal -->
+    <div id="manageVMModal" class="modal hidden" role="dialog" aria-labelledby="vmModalTitle">
+        <div class="modal-content">
+            <div id="vmModalTitle" class="modal-header">Manage Virtual Metrics</div>
+            <div id="virtual-metrics-list"></div>
+            <hr>
+            <div class="modal-header">Add New Virtual Metric</div>
+            <div class="form-group">
+                <label for="vmName">Name</label>
+                <input type="text" id="vmName" placeholder="total_efficiency">
+            </div>
+            <div class="form-group">
+                <label for="vmFormula">Formula (e.g. (pv_power + battery_power) / load)</label>
+                <input type="text" id="vmFormula" placeholder="(metric1 + metric2) / metric3">
+            </div>
+            <div class="modal-actions">
+                <button id="closeVMBtn" class="btn">Close</button>
+                <button id="saveVMBtn" class="btn btn-primary">Add</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const statusEl = document.getElementById('status');
         const themeToggle = document.getElementById('themeToggle');
@@ -334,6 +375,9 @@
         const chartTypeSelect = document.getElementById('chartType');
         const maxValGroup = document.getElementById('maxValGroup');
 
+        const manageVMModal = document.getElementById('manageVMModal');
+        const vmListEl = document.getElementById('virtual-metrics-list');
+
         const COLORS = [
             '#3498db', '#e67e22', '#2ecc71', '#9b59b6', '#f1c40f',
             '#e74c3c', '#1abc9c', '#34495e', '#d35400', '#27ae60'
@@ -342,6 +386,7 @@
         let charts = [];
         let availableMetrics = [];
         let lastData = null;
+        let virtualMetrics = [];
 
         chartTypeSelect.onchange = () => {
             maxValGroup.classList.toggle('hidden', chartTypeSelect.value !== 'gauge');
@@ -386,6 +431,7 @@
         }
 
         function getCategory(key) {
+            if (virtualMetrics.some(vm => vm.name === key)) return 'virtual';
             key = key.toLowerCase();
             if (key.includes('solar') || key.includes('pv')) return 'solar';
             if (key.includes('battery') || key.includes('bus')) return 'battery';
@@ -399,6 +445,7 @@
                 solar: document.getElementById('metrics-solar'),
                 battery: document.getElementById('metrics-battery'),
                 temp: document.getElementById('metrics-temp'),
+                virtual: document.getElementById('metrics-virtual'),
                 other: document.getElementById('metrics-other')
             };
 
@@ -425,7 +472,7 @@
 
                 const valueDiv = document.createElement('div');
                 valueDiv.className = 'value';
-                valueDiv.textContent = data[key];
+                valueDiv.textContent = typeof data[key] === 'number' ? data[key].toFixed(2).replace(/\.00$/, '') : data[key];
 
                 const unit = document.createElement('span');
                 unit.className = 'unit';
@@ -450,7 +497,7 @@
                         const max = c.max || 1000;
                         c.instance.data.datasets[0].data = [val, Math.max(0, max - val)];
                         const valEl = document.querySelector(`#chart-wrapper-${c.id} .gauge-value`);
-                        if (valEl) valEl.textContent = val;
+                        if (valEl) valEl.textContent = typeof val === 'number' ? val.toFixed(2).replace(/\.00$/, '') : val;
                         c.instance.update('none');
                     }
                 }
@@ -458,31 +505,35 @@
         }
 
         function updateMetricSelect() {
+            const currentVal = chartMetricSelect.value;
             chartMetricSelect.innerHTML = '';
-            availableMetrics.forEach(m => {
+            availableMetrics.sort().forEach(m => {
                 const opt = document.createElement('option');
                 opt.value = m;
                 opt.textContent = m;
                 chartMetricSelect.appendChild(opt);
             });
+            if (availableMetrics.includes(currentVal)) {
+                chartMetricSelect.value = currentVal;
+            }
         }
 
-        function saveCharts() {
+        async function saveCharts() {
             const config = charts.map(c => ({ id: c.id, title: c.title, type: c.type, metric: c.metric, max: c.max, range: c.range }));
-            localStorage.setItem('dashboard_charts', JSON.stringify(config));
+            await fetch('/api/charts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
         }
 
         async function fetchHistory(metric, range) {
-            // Use the specialized endpoint for compact, metric-specific data.
-            // This reduces payload size by ~90% for typical records.
-            // Adjust limit based on range to maintain granularity (1/min for 1h/24h, 1/min for 7d).
             let limit = 120; // 1h
             if (range === '24h') limit = 1500;
             if (range === '7d') limit = 11000;
 
             const response = await fetch(`/api/data/${metric}/history?start=${range}&limit=${limit}`);
             const data = await response.json();
-            // API returns most recent first, we need chronological order for the chart
             return data.reverse();
         }
 
@@ -611,11 +662,11 @@
             chartConfig.instance = instance;
         }
 
-        function removeChart(id) {
+        async function removeChart(id) {
             charts = charts.filter(c => c.id !== id);
             const el = document.getElementById(`chart-wrapper-${id}`);
             if (el) el.remove();
-            saveCharts();
+            await saveCharts();
         }
 
         document.getElementById('addChartBtn').onclick = () => {
@@ -623,7 +674,7 @@
             addChartModal.classList.remove('hidden');
         };
         document.getElementById('cancelChartBtn').onclick = () => addChartModal.classList.add('hidden');
-        document.getElementById('saveChartBtn').onclick = () => {
+        document.getElementById('saveChartBtn').onclick = async () => {
             const config = {
                 id: Date.now().toString(),
                 title: document.getElementById('chartTitle').value || document.getElementById('chartMetric').value,
@@ -634,19 +685,81 @@
             };
             charts.push(config);
             createChartUI(config);
-            saveCharts();
+            await saveCharts();
             addChartModal.classList.add('hidden');
         };
 
+        // Virtual Metrics Management
+        document.getElementById('manageVMBtn').onclick = () => {
+            refreshVMList();
+            manageVMModal.classList.remove('hidden');
+        };
+        document.getElementById('closeVMBtn').onclick = () => manageVMModal.classList.add('hidden');
+
+        async function refreshVMList() {
+            const res = await fetch('/api/virtual_metrics');
+            virtualMetrics = await res.json();
+            vmListEl.innerHTML = '';
+            virtualMetrics.forEach(vm => {
+                const div = document.createElement('div');
+                div.className = 'vm-item';
+                div.innerHTML = `
+                    <span><strong>${vm.name}</strong>: ${vm.formula}</span>
+                    <button class="btn btn-danger btn-small" onclick="deleteVM('${vm.name}')">Delete</button>
+                `;
+                vmListEl.appendChild(div);
+            });
+
+            // Also refresh available metrics in case any were added/removed
+            const keysRes = await fetch('/api/keys');
+            availableMetrics = await keysRes.json();
+            updateMetricSelect();
+        }
+
+        async function deleteVM(name) {
+            await fetch(`/api/virtual_metrics/${name}`, { method: 'DELETE' });
+            refreshVMList();
+        }
+
+        document.getElementById('saveVMBtn').onclick = async () => {
+            const name = document.getElementById('vmName').value;
+            const formula = document.getElementById('vmFormula').value;
+            if (!name || !formula) return;
+
+            const res = await fetch('/api/virtual_metrics', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, formula })
+            });
+
+            if (res.ok) {
+                document.getElementById('vmName').value = '';
+                document.getElementById('vmFormula').value = '';
+                refreshVMList();
+            } else {
+                const err = await res.json();
+                alert('Error: ' + err.detail);
+            }
+        };
+
         async function init() {
-            const savedCharts = JSON.parse(localStorage.getItem('dashboard_charts') || '[]');
+            const resCharts = await fetch('/api/charts');
+            let savedCharts = await resCharts.json();
+
             if (savedCharts.length === 0) {
-                savedCharts.push({ id: 'default1', title: 'Solar Power', metric: 'solar_power', type: 'line', range: '1h' });
-                savedCharts.push({ id: 'default2', title: 'Battery', metric: 'battery_voltage', type: 'gauge', max: 15 });
+                // Initial defaults if none in DB
+                savedCharts = [
+                    { id: 'default1', title: 'Solar Power', metric: 'solar_power', type: 'line', range: '1h' },
+                    { id: 'default2', title: 'Battery', metric: 'battery_voltage', type: 'gauge', max: 15 }
+                ];
+                // Don't save defaults automatically to avoid clutter if they don't apply
             }
 
             charts = savedCharts;
             charts.forEach(c => createChartUI(c));
+
+            const resVM = await fetch('/api/virtual_metrics');
+            virtualMetrics = await resVM.json();
 
             fetch('/api/last')
                 .then(res => res.json())
@@ -667,13 +780,16 @@
                     const timeStr = msg.payload.timestamp.split(' ')[1].split('.')[0];
                     charts.forEach(c => {
                         if (c.type === 'line' && c.instance && c.range === '1h') {
-                            c.instance.data.labels.push(timeStr);
-                            c.instance.data.datasets[0].data.push(msg.payload.data[c.metric]);
-                            if (c.instance.data.labels.length > 60) {
-                                c.instance.data.labels.shift();
-                                c.instance.data.datasets[0].data.shift();
+                            const val = msg.payload.data[c.metric];
+                            if (val !== undefined) {
+                                c.instance.data.labels.push(timeStr);
+                                c.instance.data.datasets[0].data.push(val);
+                                if (c.instance.data.labels.length > 60) {
+                                    c.instance.data.labels.shift();
+                                    c.instance.data.datasets[0].data.shift();
+                                }
+                                c.instance.update('none');
                             }
-                            c.instance.update('none');
                         }
                     });
                 }
