@@ -42,7 +42,10 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# Simple in-memory cache for virtual metrics, SQL expressions, and compiled formulas\n_virtual_metrics_cache = None\n_sql_expressions_cache = {}\n_compiled_formulas_cache = {}
+# Simple in-memory cache for virtual metrics, SQL expressions, and compiled formulas
+_virtual_metrics_cache = None
+_sql_expressions_cache = {}
+_compiled_formulas_cache = {}
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -68,8 +71,10 @@ def get_virtual_metrics_map():
 def invalidate_vm_cache():
     global _virtual_metrics_cache
     global _sql_expressions_cache
+    global _compiled_formulas_cache
     _virtual_metrics_cache = None
     _sql_expressions_cache = {}
+    _compiled_formulas_cache = {}
 
 def is_safe_formula(formula: str):
     """
@@ -113,15 +118,29 @@ def formula_to_sql(formula: str):
 def evaluate_formula(formula: str, data: dict):
     """
     Safely evaluates a virtual metric formula using the provided data.
+    Caches compiled code and metric names for performance.
     """
+    global _compiled_formulas_cache
+    if formula not in _compiled_formulas_cache:
+        if not is_safe_formula(formula):
+            _compiled_formulas_cache[formula] = None
+        else:
+            try:
+                metrics = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
+                code = compile(formula, '<string>', 'eval')
+                _compiled_formulas_cache[formula] = (code, metrics)
+            except Exception:
+                _compiled_formulas_cache[formula] = None
+
+    cached = _compiled_formulas_cache[formula]
+    if cached is None:
+        return None
+
+    code, metrics = cached
     try:
-        # Extract variables from formula
-        metrics = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
         # Build local namespace for eval
         context = {m: float(data.get(m, 0)) for m in metrics}
-        # Use a restricted eval with only necessary operators
-        if is_safe_formula(formula):
-            return eval(formula, {"__builtins__": {}}, context)
+        return eval(code, {"__builtins__": {}}, context)
     except Exception:
         pass
     return None
