@@ -161,7 +161,7 @@ async def collect_now(run_hourly=False, run_daily=False):
             print("Skipping websocket notification (api not available)")
 
         # Send to Macrodroid
-        notify_tasks.append(send_to_macrodroid(data.copy()))
+        notify_tasks.append(send_to_macrodroid(data))
 
         # Run database write and notifications concurrently
         await asyncio.gather(db_task, *notify_tasks)
