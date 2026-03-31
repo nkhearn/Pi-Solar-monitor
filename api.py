@@ -42,9 +42,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# Simple in-memory cache for virtual metrics and pre-compiled SQL expressions
-_virtual_metrics_cache = None
-_sql_expressions_cache = {}
+# Simple in-memory cache for virtual metrics, SQL expressions, and compiled formulas\n_virtual_metrics_cache = None\n_sql_expressions_cache = {}\n_compiled_formulas_cache = {}
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
