@@ -531,45 +531,36 @@
         let virtualMetrics = [];
         let metricConfigs = {};
 
+        function parseBackendTimestamp(ts) {
+            if (!ts) return null;
+            // The backend returns UTC timestamps in 'YYYY-MM-DD HH:MM:SS.mmmmmm' format.
+            // Converting to 'YYYY-MM-DDTHH:MM:SS.mmmmmmZ' ensures Date() treats it as UTC.
+            const isoStr = ts.replace(' ', 'T') + 'Z';
+            return new Date(isoStr);
+        }
+
         function formatTimestamp(ts) {
-    if (!ts) return '';
-    
-    const parts = ts.split(' ');
-    const dateParts = parts[0].split('-');
-    const timeParts = parts[1].split(':');
+            const dt = parseBackendTimestamp(ts);
+            if (!dt) return '';
 
-    // Create the date using UTC values
-    const utcTimestamp = Date.UTC(
-        dateParts[0], 
-        dateParts[1] - 1, 
-        dateParts[2], 
-        timeParts[0], 
-        timeParts[1], 
-        timeParts[2].split('.')[0]
-    );
+            const now = new Date();
+            const isToday = dt.getDate() === now.getDate() &&
+                            dt.getMonth() === now.getMonth() &&
+                            dt.getFullYear() === now.getFullYear();
 
-    const dt = new Date(utcTimestamp);
-    const now = new Date();
+            const pad = (n) => n.toString().padStart(2, '0');
+            const hours = pad(dt.getHours());
+            const minutes = pad(dt.getMinutes());
 
-    const isToday = dt.getDate() === now.getDate() &&
-                    dt.getMonth() === now.getMonth() &&
-                    dt.getFullYear() === now.getFullYear();
-
-    const pad = (n) => n.toString().padStart(2, '0');
-    
-    // .getHours() will now correctly return BST (UTC+1)
-    const hours = pad(dt.getHours());
-    const minutes = pad(dt.getMinutes());
-
-    if (isToday) {
-        return `${hours}:${minutes}`;
-    } else {
-        const day = pad(dt.getDate());
-        const month = pad(dt.getMonth() + 1);
-        const year = dt.getFullYear().toString().slice(-2);
-        return `${day}-${month}-${year} ${hours}:${minutes}`;
-    }
-}
+            if (isToday) {
+                return `${hours}:${minutes}`;
+            } else {
+                const day = pad(dt.getDate());
+                const month = pad(dt.getMonth() + 1);
+                const year = dt.getFullYear().toString().slice(-2);
+                return `${day}-${month}-${year} ${hours}:${minutes}`;
+            }
+        }
 
 
         chartTypeSelect.onchange = () => {
@@ -786,8 +777,12 @@
             const data = await fetchHistory(chartConfig.metric, range);
             if (chartConfig.instance) {
                 chartConfig.instance.data.labels = data.map(d => {
-                    const ts = d[0].split(' ')[1].split(':');
-                    return range === '1h' ? `${ts[0]}:${ts[1]}:${ts[2].split('.')[0]}` : `${ts[0]}:${ts[1]}`;
+                    const dt = parseBackendTimestamp(d[0]);
+                    const pad = (n) => n.toString().padStart(2, '0');
+                    const h = pad(dt.getHours());
+                    const m = pad(dt.getMinutes());
+                    const s = pad(dt.getSeconds());
+                    return range === '1h' ? `${h}:${m}:${s}` : `${h}:${m}`;
                 });
                 chartConfig.instance.data.datasets[0].data = data.map(d => d[1]);
                 chartConfig.instance.update();
@@ -1128,7 +1123,11 @@
                 const msg = JSON.parse(event.data);
                 if (msg.type === 'new_data') {
                     renderMetrics(msg.payload);
-                    const timeStr = msg.payload.timestamp.split(' ')[1].split('.')[0];
+
+                    const dt = parseBackendTimestamp(msg.payload.timestamp);
+                    const pad = (n) => n.toString().padStart(2, '0');
+                    const timeStr = `${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
+
                     charts.forEach(c => {
                         if (c.type === 'line' && c.instance && c.range === '1h') {
                             const val = msg.payload.data[c.metric];
