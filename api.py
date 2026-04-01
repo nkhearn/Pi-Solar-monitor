@@ -496,7 +496,7 @@ def parse_relative_time(time_str: str) -> str:
         return None
     now_utc = datetime.now(timezone.utc)
     if time_str.lower() == "today":
-        return now_utc.replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%f')
+        return now_utc.replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S.%f')
     match = re.match(r'^(\d+)([smhd])$', time_str.lower())
     if match:
         value, unit = match.groups()
@@ -505,7 +505,7 @@ def parse_relative_time(time_str: str) -> str:
         elif unit == 'm': delta = timedelta(minutes=value)
         elif unit == 'h': delta = timedelta(hours=value)
         elif unit == 'd': delta = timedelta(days=value)
-        return (now_utc - delta).strftime('%Y-%m-%d %H:%M:%f')
+        return (now_utc - delta).strftime('%Y-%m-%d %H:%M:%S.%f')
     return time_str
 
 def build_data_query(

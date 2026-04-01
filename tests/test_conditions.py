@@ -17,7 +17,7 @@ def setup_test_db():
     cursor.execute('''
         CREATE TABLE data_points (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
+            timestamp DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S.%f', 'NOW')),
             data TEXT
         )
     ''')
@@ -34,7 +34,7 @@ def setup_test_db():
 
     # Insert older data for stats
     old_data = {"pv_voltage": 240}
-    cursor.execute("INSERT INTO data_points (timestamp, data) VALUES (STRFTIME('%Y-%m-%d %H:%M:%f', 'now', '-30 minutes'), ?)", (json.dumps(old_data),))
+    cursor.execute("INSERT INTO data_points (timestamp, data) VALUES (STRFTIME('%Y-%m-%d %H:%M:%S.%f', 'now', '-30 minutes'), ?)", (json.dumps(old_data),))
 
     conn.commit()
     conn.close()

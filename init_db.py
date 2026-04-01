@@ -10,7 +10,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS data_points (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
+            timestamp DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%S.%f', 'NOW')),
             data TEXT
         )
     ''')
