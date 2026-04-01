@@ -532,33 +532,45 @@
         let metricConfigs = {};
 
         function formatTimestamp(ts) {
-            if (!ts) return '';
-            // Handle SQLite format YYYY-MM-DD HH:MM:SS.SSS
-            // Ensure we handle it consistently as a local time or UTC as stored
-            const parts = ts.split(' ');
-            const dateParts = parts[0].split('-');
-            const timeParts = parts[1].split(':');
+    if (!ts) return '';
+    
+    const parts = ts.split(' ');
+    const dateParts = parts[0].split('-');
+    const timeParts = parts[1].split(':');
 
-            const dt = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], timeParts[0], timeParts[1], timeParts[2].split('.')[0]);
-            const now = new Date();
+    // Create the date using UTC values
+    const utcTimestamp = Date.UTC(
+        dateParts[0], 
+        dateParts[1] - 1, 
+        dateParts[2], 
+        timeParts[0], 
+        timeParts[1], 
+        timeParts[2].split('.')[0]
+    );
 
-            const isToday = dt.getDate() === now.getDate() &&
-                            dt.getMonth() === now.getMonth() &&
-                            dt.getFullYear() === now.getFullYear();
+    const dt = new Date(utcTimestamp);
+    const now = new Date();
 
-            const pad = (n) => n.toString().padStart(2, '0');
-            const hours = pad(dt.getHours());
-            const minutes = pad(dt.getMinutes());
+    const isToday = dt.getDate() === now.getDate() &&
+                    dt.getMonth() === now.getMonth() &&
+                    dt.getFullYear() === now.getFullYear();
 
-            if (isToday) {
-                return `${hours}:${minutes}`;
-            } else {
-                const day = pad(dt.getDate());
-                const month = pad(dt.getMonth() + 1);
-                const year = dt.getFullYear().toString().slice(-2);
-                return `${day}-${month}-${year} ${hours}:${minutes}`;
-            }
-        }
+    const pad = (n) => n.toString().padStart(2, '0');
+    
+    // .getHours() will now correctly return BST (UTC+1)
+    const hours = pad(dt.getHours());
+    const minutes = pad(dt.getMinutes());
+
+    if (isToday) {
+        return `${hours}:${minutes}`;
+    } else {
+        const day = pad(dt.getDate());
+        const month = pad(dt.getMonth() + 1);
+        const year = dt.getFullYear().toString().slice(-2);
+        return `${day}-${month}-${year} ${hours}:${minutes}`;
+    }
+}
+
 
         chartTypeSelect.onchange = () => {
             maxValGroup.classList.toggle('hidden', chartTypeSelect.value !== 'gauge');
