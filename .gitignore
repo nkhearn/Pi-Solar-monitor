@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
 *$py.class
-data/inverter_logs.db
+data/inverter_logs.db*
 output.log
+server.log
