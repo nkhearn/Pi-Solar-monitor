@@ -179,6 +179,11 @@
             color: var(--header-text);
             word-break: break-all;
         }
+        .card .timestamp {
+            font-size: 0.7em;
+            color: #888;
+            margin-top: 4px;
+        }
         .edit-metric-btn {
             opacity: 0;
             transition: opacity 0.2s;
@@ -522,8 +527,38 @@
         let charts = [];
         let availableMetrics = [];
         let lastData = null;
+        let lastPayload = null;
         let virtualMetrics = [];
         let metricConfigs = {};
+
+        function formatTimestamp(ts) {
+            if (!ts) return '';
+            // Handle SQLite format YYYY-MM-DD HH:MM:SS.SSS
+            // Ensure we handle it consistently as a local time or UTC as stored
+            const parts = ts.split(' ');
+            const dateParts = parts[0].split('-');
+            const timeParts = parts[1].split(':');
+
+            const dt = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], timeParts[0], timeParts[1], timeParts[2].split('.')[0]);
+            const now = new Date();
+
+            const isToday = dt.getDate() === now.getDate() &&
+                            dt.getMonth() === now.getMonth() &&
+                            dt.getFullYear() === now.getFullYear();
+
+            const pad = (n) => n.toString().padStart(2, '0');
+            const hours = pad(dt.getHours());
+            const minutes = pad(dt.getMinutes());
+
+            if (isToday) {
+                return `${hours}:${minutes}`;
+            } else {
+                const day = pad(dt.getDate());
+                const month = pad(dt.getMonth() + 1);
+                const year = dt.getFullYear().toString().slice(-2);
+                return `${day}-${month}-${year} ${hours}:${minutes}`;
+            }
+        }
 
         chartTypeSelect.onchange = () => {
             maxValGroup.classList.toggle('hidden', chartTypeSelect.value !== 'gauge');
@@ -576,7 +611,9 @@
             return 'other';
         }
 
-        function renderMetrics(data) {
+        function renderMetrics(payload) {
+            lastPayload = payload;
+            const data = payload.data;
             lastData = data;
             const categories = {
                 solar: document.getElementById('metrics-solar'),
@@ -638,8 +675,13 @@
                     unit.className = 'unit';
                     valueDiv.appendChild(unit);
 
+                    const tsDiv = document.createElement('div');
+                    tsDiv.className = 'timestamp';
+                    tsDiv.id = `metric-ts-${key}`;
+
                     card.appendChild(titleEl);
                     card.appendChild(valueDiv);
+                    card.appendChild(tsDiv);
                     categories[category].appendChild(card);
                 } else {
                     valueDiv = document.getElementById(`metric-value-${key}`);
@@ -655,6 +697,14 @@
                 const displayValue = typeof data[key] === 'number' ? data[key].toFixed(2).replace(/\.00$/, '') : data[key];
                 if (valueDiv.childNodes[0].textContent !== displayValue) {
                     valueDiv.childNodes[0].textContent = displayValue;
+                }
+
+                const tsDiv = document.getElementById(`metric-ts-${key}`);
+                if (tsDiv) {
+                    const formattedTs = formatTimestamp(payload.timestamp);
+                    if (tsDiv.textContent !== formattedTs) {
+                        tsDiv.textContent = formattedTs;
+                    }
                 }
             }
 
@@ -934,7 +984,7 @@
             });
 
             customizeMetricModal.classList.add('hidden');
-            if (lastData) renderMetrics(lastData);
+            if (lastPayload) renderMetrics(lastPayload);
             refreshMetricConfigsList();
         };
 
@@ -1052,7 +1102,7 @@
 
             fetch('/api/last')
                 .then(res => res.json())
-                .then(data => { if (data.data) renderMetrics(data.data); });
+                .then(payload => { if (payload.data) renderMetrics(payload); });
 
             connectWebSocket();
         }
@@ -1065,7 +1115,7 @@
             ws.onmessage = (event) => {
                 const msg = JSON.parse(event.data);
                 if (msg.type === 'new_data') {
-                    renderMetrics(msg.payload.data);
+                    renderMetrics(msg.payload);
                     const timeStr = msg.payload.timestamp.split(' ')[1].split('.')[0];
                     charts.forEach(c => {
                         if (c.type === 'line' && c.instance && c.range === '1h') {
