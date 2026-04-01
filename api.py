@@ -439,6 +439,33 @@ async def save_charts(charts: List[Dict] = Body(...)):
         raise HTTPException(status_code=500, detail=str(e))
     return {"status": "success"}
 
+def _get_metric_configs_from_db():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM metric_configs')
+    return cursor.fetchall()
+
+@app.get("/api/metric_configs")
+async def get_metric_configs():
+    rows = await asyncio.to_thread(_get_metric_configs_from_db)
+    return {row['key']: json.loads(row['config']) for row in rows}
+
+def _save_metric_configs_to_db(configs: Dict[str, Dict]):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # We replace the entire configuration for all metrics passed
+    for key, config in configs.items():
+        cursor.execute('INSERT OR REPLACE INTO metric_configs (key, config) VALUES (?, ?)', (key, json.dumps(config)))
+    conn.commit()
+
+@app.post("/api/metric_configs")
+async def save_metric_configs(configs: Dict[str, Dict] = Body(...)):
+    try:
+        await asyncio.to_thread(_save_metric_configs_to_db, configs)
+    except sqlite3.Error as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "success"}
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
