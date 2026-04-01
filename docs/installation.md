@@ -53,6 +53,11 @@ It is recommended to use a virtual environment or ensure all system dependencies
 pip install -r requirements.txt
 ```
 
+> [!NOTE]
+> For data migration from EmonCMS or for running automated tests, you may need additional packages:
+> - **Migration**: `mysql-connector-python`
+> - **Testing**: `pytest`, `pytest-asyncio`, `httpx`, `playwright`
+
 ### 3. Initialize the Database
 
 The system uses **SQLite** to store historical data, optimized for long-term use on SD cards. Run the initialization script to create the necessary tables and enable Write-Ahead Logging (WAL).

@@ -21,6 +21,12 @@ def setup_test_db():
             data TEXT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS virtual_metrics (
+            name TEXT PRIMARY KEY,
+            formula TEXT NOT NULL
+        )
+    ''')
 
     # Insert some test data
     data = {"pv_voltage": 250, "battery_voltage": 52}
