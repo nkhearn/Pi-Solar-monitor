@@ -778,11 +778,12 @@
             if (chartConfig.instance) {
                 chartConfig.instance.data.labels = data.map(d => {
                     const dt = parseBackendTimestamp(d[0]);
+                    if (!dt) return 'N/A';
                     const pad = (n) => n.toString().padStart(2, '0');
                     const h = pad(dt.getHours());
                     const m = pad(dt.getMinutes());
                     const s = pad(dt.getSeconds());
-                    return range === '1h' ? `${h}:${m}:${s}` : `${h}:${m}`;
+                    return range === '1h' ? h + ':' + m + ':' + s : h + ':' + m;
                 });
                 chartConfig.instance.data.datasets[0].data = data.map(d => d[1]);
                 chartConfig.instance.update();
