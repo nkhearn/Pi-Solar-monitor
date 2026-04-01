@@ -145,6 +145,23 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px var(--card-shadow);
             border: 1px solid var(--border-color);
+            position: relative;
+            transition: all 0.2s;
+        }
+        .card.collapsed {
+            padding: 4px 15px;
+            min-height: 2px;
+        }
+        .card.collapsed h3, .card.collapsed .value {
+            display: none;
+        }
+        .card.collapsed::after {
+            content: "";
+            display: block;
+            height: 2px;
+            width: 100%;
+            background: var(--accent-color);
+            opacity: 0.5;
         }
         .card h3 {
             margin-top: 0;
@@ -152,12 +169,24 @@
             color: var(--card-title);
             text-transform: uppercase;
             letter-spacing: 0.05em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         .card .value {
             font-size: 1.8em;
             font-weight: bold;
             color: var(--header-text);
             word-break: break-all;
+        }
+        .edit-metric-btn {
+            opacity: 0;
+            transition: opacity 0.2s;
+            cursor: pointer;
+            font-size: 1.2em;
+        }
+        .card:hover .edit-metric-btn {
+            opacity: 1;
         }
 
         .chart-grid {
@@ -219,6 +248,9 @@
             align-items: center;
             z-index: 1000;
         }
+        #customizeMetricModal {
+            z-index: 1100;
+        }
         .modal-content {
             background: var(--container-bg);
             padding: 20px;
@@ -276,6 +308,7 @@
         <header>
             <h1>Solar Monitor</h1>
             <div class="controls">
+                <button id="customizeBtn" class="btn">⚙️ Customize</button>
                 <button id="manageVMBtn" class="btn">🧮 Virtual Metrics</button>
                 <button id="themeToggle" class="btn" aria-label="Toggle dark mode">🌙 Dark Mode</button>
                 <div id="status" class="status disconnected" aria-live="polite">Connecting...</div>
@@ -344,6 +377,48 @@
         </div>
     </div>
 
+    <!-- Customize Metric Modal -->
+    <div id="customizeMetricModal" class="modal hidden" role="dialog" aria-labelledby="cmModalTitle">
+        <div class="modal-content">
+            <div id="cmModalTitle" class="modal-header">Customize Metric</div>
+            <input type="hidden" id="cmKey">
+            <div class="form-group">
+                <label for="cmDisplayName">Display Name</label>
+                <input type="text" id="cmDisplayName" placeholder="Metric Name">
+            </div>
+            <div class="form-group">
+                <label for="cmColor">Color</label>
+                <input type="color" id="cmColor" value="#3498db">
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="cmHidden"> Hide Metric (collapse)
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="cmOrder">Order (lower = first)</label>
+                <input type="number" id="cmOrder" value="0">
+            </div>
+            <div class="modal-actions">
+                <button id="cancelCMBtn" class="btn">Cancel</button>
+                <button id="saveCMBtn" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customize Dashboard Modal -->
+    <div id="customizeDashboardModal" class="modal hidden" role="dialog" aria-labelledby="cdModalTitle">
+        <div class="modal-content" style="width: 600px; max-height: 80vh; overflow-y: auto;">
+            <div id="cdModalTitle" class="modal-header">Customize Dashboard Metrics</div>
+            <div id="metric-configs-list">
+                <!-- Metrics and their basic config here -->
+            </div>
+            <div class="modal-actions" style="margin-top: 20px; position: sticky; bottom: 0; background: var(--container-bg); padding: 10px 0;">
+                <button id="closeCDBtn" class="btn">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Manage Virtual Metrics Modal -->
     <div id="manageVMModal" class="modal hidden" role="dialog" aria-labelledby="vmModalTitle">
         <div class="modal-content">
@@ -387,6 +462,7 @@
         let availableMetrics = [];
         let lastData = null;
         let virtualMetrics = [];
+        let metricConfigs = {};
 
         chartTypeSelect.onchange = () => {
             maxValGroup.classList.toggle('hidden', chartTypeSelect.value !== 'gauge');
@@ -450,31 +526,48 @@
             };
 
             const seenCategories = new Set();
-            const metrics = Object.keys(data).filter(k => typeof data[k] === 'number');
+            const allKeys = Object.keys(data).filter(k => typeof data[k] !== 'object' || data[k] === null);
 
-            if (metrics.length !== availableMetrics.length) {
-                availableMetrics = metrics;
+            if (allKeys.length !== availableMetrics.length) {
+                availableMetrics = allKeys.filter(k => typeof data[k] === 'number');
                 updateMetricSelect();
-                // If the number of metrics changed, we might need to rebuild the UI to add/remove cards
+                // Rebuild UI if keys changed
                 Object.values(categories).forEach(el => el.innerHTML = '');
             }
 
-            for (const key of Object.keys(data)) {
-                if (typeof data[key] === 'object' && data[key] !== null) continue;
+            // Sort keys based on config order
+            const sortedKeys = [...allKeys].sort((a, b) => {
+                const orderA = metricConfigs[a]?.order ?? 0;
+                const orderB = metricConfigs[b]?.order ?? 0;
+                if (orderA !== orderB) return orderA - orderB;
+                return a.localeCompare(b);
+            });
 
+            for (const key of sortedKeys) {
                 const category = getCategory(key);
                 seenCategories.add(category);
 
                 let card = document.getElementById(`metric-card-${key}`);
                 let valueDiv;
+                let titleEl;
+
+                const config = metricConfigs[key] || {};
 
                 if (!card) {
                     card = document.createElement('div');
                     card.className = 'card';
                     card.id = `metric-card-${key}`;
 
-                    const title = document.createElement('h3');
-                    title.textContent = key.replace(/_/g, ' ');
+                    titleEl = document.createElement('h3');
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'metric-name';
+                    titleEl.appendChild(nameSpan);
+
+                    const editBtn = document.createElement('span');
+                    editBtn.className = 'edit-metric-btn';
+                    editBtn.innerHTML = '⚙️';
+                    editBtn.onclick = (e) => { e.stopPropagation(); openCustomizeMetric(key); };
+                    titleEl.appendChild(editBtn);
 
                     valueDiv = document.createElement('div');
                     valueDiv.className = 'value';
@@ -484,15 +577,21 @@
                     unit.className = 'unit';
                     valueDiv.appendChild(unit);
 
-                    card.appendChild(title);
+                    card.appendChild(titleEl);
                     card.appendChild(valueDiv);
                     categories[category].appendChild(card);
                 } else {
                     valueDiv = document.getElementById(`metric-value-${key}`);
+                    titleEl = card.querySelector('h3');
                 }
 
+                // Apply config
+                const nameSpan = titleEl.querySelector('.metric-name');
+                nameSpan.textContent = config.displayName || key.replace(/_/g, ' ');
+                card.style.borderTop = `4px solid ${config.color || 'transparent'}`;
+                card.classList.toggle('collapsed', !!config.hidden);
+
                 const displayValue = typeof data[key] === 'number' ? data[key].toFixed(2).replace(/\.00$/, '') : data[key];
-                // Update only the text node, preserving the .unit span
                 if (valueDiv.childNodes[0].textContent !== displayValue) {
                     valueDiv.childNodes[0].textContent = displayValue;
                 }
@@ -735,6 +834,103 @@
             refreshVMList();
         }
 
+        // Metric Customization
+        const customizeMetricModal = document.getElementById('customizeMetricModal');
+        const customizeDashboardModal = document.getElementById('customizeDashboardModal');
+        const mcListEl = document.getElementById('metric-configs-list');
+
+        document.getElementById('customizeBtn').onclick = () => {
+            refreshMetricConfigsList();
+            customizeDashboardModal.classList.remove('hidden');
+        };
+        document.getElementById('closeCDBtn').onclick = () => customizeDashboardModal.classList.add('hidden');
+
+        function openCustomizeMetric(key) {
+            const config = metricConfigs[key] || {};
+            document.getElementById('cmKey').value = key;
+            document.getElementById('cmDisplayName').value = config.displayName || '';
+            document.getElementById('cmColor').value = config.color || '#3498db';
+            document.getElementById('cmHidden').checked = !!config.hidden;
+            document.getElementById('cmOrder').value = config.order ?? 0;
+            customizeMetricModal.classList.remove('hidden');
+        }
+
+        document.getElementById('cancelCMBtn').onclick = () => customizeMetricModal.classList.add('hidden');
+        document.getElementById('saveCMBtn').onclick = async () => {
+            const key = document.getElementById('cmKey').value;
+            const config = {
+                displayName: document.getElementById('cmDisplayName').value,
+                color: document.getElementById('cmColor').value,
+                hidden: document.getElementById('cmHidden').checked,
+                order: parseInt(document.getElementById('cmOrder').value) || 0
+            };
+
+            metricConfigs[key] = config;
+            await fetch('/api/metric_configs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [key]: config })
+            });
+
+            customizeMetricModal.classList.add('hidden');
+            if (lastData) renderMetrics(lastData);
+            refreshMetricConfigsList();
+        };
+
+        async function refreshMetricConfigsList() {
+            mcListEl.innerHTML = '';
+            let keysToConfig = [];
+            if (lastData) {
+                keysToConfig = Object.keys(lastData).filter(k => typeof lastData[k] !== 'object' || lastData[k] === null);
+            } else {
+                // If no data yet, show keys from configs if any
+                keysToConfig = Object.keys(metricConfigs);
+            }
+
+            if (keysToConfig.length === 0) {
+                mcListEl.innerHTML = '<div style="padding: 20px; text-align: center; opacity: 0.7;">No metrics available to customize yet.</div>';
+                return;
+            }
+
+            const sortedKeys = keysToConfig.sort((a,b) => {
+                const orderA = metricConfigs[a]?.order ?? 0;
+                const orderB = metricConfigs[b]?.order ?? 0;
+                if (orderA !== orderB) return orderA - orderB;
+                return a.localeCompare(b);
+            });
+
+            sortedKeys.forEach(key => {
+                const config = metricConfigs[key] || {};
+                const div = document.createElement('div');
+                div.className = 'vm-item';
+
+                const span = document.createElement('span');
+                span.style.borderLeft = `10px solid ${config.color || '#ccc'}`;
+                span.style.paddingLeft = '10px';
+
+                const strong = document.createElement('strong');
+                strong.textContent = config.displayName || key;
+                span.appendChild(strong);
+
+                span.appendChild(document.createTextNode(` (${key})`));
+                span.appendChild(document.createElement('br'));
+
+                const small = document.createElement('small');
+                small.textContent = `Order: ${config.order ?? 0} | ${config.hidden ? 'Hidden' : 'Visible'}`;
+                span.appendChild(small);
+
+                div.appendChild(span);
+
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-small';
+                btn.textContent = 'Edit';
+                btn.onclick = () => openCustomizeMetric(key);
+                div.appendChild(btn);
+
+                mcListEl.appendChild(div);
+            });
+        }
+
         document.getElementById('saveVMBtn').onclick = async () => {
             const name = document.getElementById('vmName').value;
             const formula = document.getElementById('vmFormula').value;
@@ -757,6 +953,9 @@
         };
 
         async function init() {
+            const resConfigs = await fetch('/api/metric_configs');
+            metricConfigs = await resConfigs.json();
+
             const resCharts = await fetch('/api/charts');
             let savedCharts = await resCharts.json();
 

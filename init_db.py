@@ -33,6 +33,14 @@ def init_db():
         )
     ''')
 
+    # Table for metric configurations
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS metric_configs (
+            key TEXT PRIMARY KEY,
+            config TEXT NOT NULL
+        )
+    ''')
+
     # Enable Write-Ahead Logging for better concurrency and performance
     cursor.execute('PRAGMA journal_mode=WAL')
 
