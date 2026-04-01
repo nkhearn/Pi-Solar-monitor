@@ -84,3 +84,18 @@ MACRODROID_URL = "https://trigger.macrodroid.com/YOUR_DEVICE_UUID/solar_data"
 ### 📦 Data Payload
 
 The entire collected data object is sent as a JSON payload in a POST request. You can use Macrodroid's "Webhook" trigger and parse the JSON variables to create custom automations (e.g., "Notify me if battery is below 48V").
+
+---
+
+## 📈 External Data Access
+
+The system provides a unified **External Charts API** designed for easy integration with third-party tools like Home Assistant, custom widgets, or other monitoring systems.
+
+### 🔗 Quick Access
+Use the `/api/chart/data` endpoint to retrieve data for any metric by specifying its type (gauge/line) and a time period.
+
+**Examples:**
+- **Latest Battery Voltage (Gauge)**: `GET /api/chart/data?type=gauge&metric=battery_voltage`
+- **Solar Power (24h Trend)**: `GET /api/chart/data?type=line&metric=solar_power&period=24h`
+
+For full details, see the [REST API Documentation](api.md#external-charts-api).

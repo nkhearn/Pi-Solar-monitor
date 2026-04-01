@@ -356,6 +356,22 @@ async def get_data_single_stat(
 
     return {"value": row["value"]}
 
+@app.get("/api/chart/data")
+async def get_chart_data(
+    chart_type: str = Query(..., alias="type", pattern="^(line|gauge)$"),
+    metric: str = Query(...),
+    period: Optional[str] = Query(None),
+    limit: int = Query(100)
+):
+    """
+    Unified endpoint for external chart data access.
+    Supports 'line' (historical) and 'gauge' (latest) chart types.
+    """
+    if chart_type == "gauge":
+        return await get_data_last(metric)
+    elif chart_type == "line":
+        return await get_data_history(key=metric, start=period, limit=limit)
+
 @app.get("/api/history")
 async def get_history(start: Optional[str] = Query(None), end: Optional[str] = Query(None), limit: int = Query(100)):
     query = 'SELECT * FROM data_points'

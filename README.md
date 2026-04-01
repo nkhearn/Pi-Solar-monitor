@@ -29,6 +29,7 @@ The system periodically polls various data sources via custom "collectors", stor
 - 📊 **Real-time Dashboard**: Built-in web interface with live updates via WebSockets and historical visualization using Chart.js.
 - 🧮 **Advanced Virtual Metrics**: Define calculated values using arithmetic formulas with secure and efficient server-side evaluation.
 - ⚡ **Conditional Actions**: Define logic in `.cond` files to automate responses to system events.
+- 📊 **External Charts API**: Unified endpoint for quick data retrieval by chart type (line/gauge), metric, and time period.
 - 🔌 **Robust API**: REST and WebSocket endpoints for easy access to live and historical data.
 - 📲 **Automation Ready**: Integrated Macrodroid webhook support to trigger mobile notifications or logic.
 - 🪶 **Ultra Lightweight**: Specifically optimized for low-power hardware like the Pi Zero 2 W.

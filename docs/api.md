@@ -197,6 +197,39 @@ Deletes a virtual metric.
 
 ---
 
+## 📊 External Charts API
+
+### `GET` /api/chart/data
+Unified endpoint for external chart data access. Supports both historical trends and latest values.
+
+- **Query Parameters**:
+    - `type` (required): Chart type. Available: `line` (historical), `gauge` (latest).
+    - `metric` (required): The data key to retrieve.
+    - `period` (optional): Relative time range (e.g., `1h`, `24h`, `7d`, `today`). Only applicable for `type=line`.
+    - `limit` (optional): Max number of records for historical data (default 100).
+
+- **Success Response (type=gauge)**:
+  - **Code**: 200
+  - **Content**:
+    ```json
+    {
+        "timestamp": "2026-03-17 15:45:01.080",
+        "value": 1523.08
+    }
+    ```
+
+- **Success Response (type=line)**:
+  - **Code**: 200
+  - **Content**:
+    ```json
+    [
+        ["2026-03-17 15:45:01.080", 1523.08],
+        ["2026-03-17 15:44:01.031", 1523.08]
+    ]
+    ```
+
+---
+
 ## 📊 Dashboard Chart Endpoints
 
 ### `GET` /api/charts
