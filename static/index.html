@@ -1126,8 +1126,9 @@
                     renderMetrics(msg.payload);
 
                     const dt = parseBackendTimestamp(msg.payload.timestamp);
+                    if (!dt) return;
                     const pad = (n) => n.toString().padStart(2, '0');
-                    const timeStr = `${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
+                    const timeStr = pad(dt.getHours()) + ':' + pad(dt.getMinutes()) + ':' + pad(dt.getSeconds());
 
                     charts.forEach(c => {
                         if (c.type === 'line' && c.instance && c.range === '1h') {
