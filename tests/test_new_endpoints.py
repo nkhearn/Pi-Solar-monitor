@@ -58,6 +58,26 @@ def test_api():
     assert response.status_code == 200
     assert response.json()["value"] is None
 
+    # 8. Test /api/chart/data (gauge)
+    print("\nTesting /api/chart/data?type=gauge&metric=solar_prediction...")
+    response = requests.get(f"{base_url}/api/chart/data?type=gauge&metric=solar_prediction")
+    print(f"Status: {response.status_code}, Data: {response.json()}")
+    assert response.status_code == 200
+    assert "value" in response.json()
+
+    # 9. Test /api/chart/data (line)
+    print("\nTesting /api/chart/data?type=line&metric=solar_prediction&period=1h...")
+    response = requests.get(f"{base_url}/api/chart/data?type=line&metric=solar_prediction&period=1h")
+    print(f"Status: {response.status_code}, History count: {len(response.json())}")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
+    # 10. Test /api/chart/data with invalid type
+    print("\nTesting /api/chart/data with invalid type...")
+    response = requests.get(f"{base_url}/api/chart/data?type=invalid&metric=solar_prediction")
+    print(f"Status: {response.status_code}, Detail: {response.json()}")
+    assert response.status_code == 422 # Validation error for pattern mismatch
+
 if __name__ == "__main__":
     # Start the server
     process = subprocess.Popen(["uvicorn", "api:app", "--host", "127.0.0.1", "--port", "8000"])

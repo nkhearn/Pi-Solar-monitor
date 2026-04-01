@@ -356,6 +356,30 @@ async def get_data_single_stat(
 
     return {"value": row["value"]}
 
+@app.get("/api/chart/data")
+async def get_chart_data(
+    type: str = Query(..., pattern="^(line|gauge)$"),
+    metric: str = Query(...),
+    period: Optional[str] = Query(None),
+    limit: int = Query(100)
+):
+    """
+    Unified endpoint for external chart data access.
+    Supports 'line' (historical) and 'gauge' (latest) chart types.
+    """
+    if type == "gauge":
+        return await get_data_last(metric)
+    elif type == "line":
+        # We call the functions directly instead of via the endpoint handlers
+        # to ensure parameters are passed correctly as values, not Query objects.
+        v_metrics = await get_virtual_metrics_map()
+        query, params = build_data_query(metric, v_metrics, start=period, limit=limit)
+        try:
+            rows = await asyncio.to_thread(_execute_query_all, query, params)
+            return [[row["timestamp"], row["value"]] for row in rows]
+        except sqlite3.OperationalError as e:
+            raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
+
 @app.get("/api/history")
 async def get_history(start: Optional[str] = Query(None), end: Optional[str] = Query(None), limit: int = Query(100)):
     query = 'SELECT * FROM data_points'
