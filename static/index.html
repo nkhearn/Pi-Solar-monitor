@@ -276,8 +276,7 @@
             .chart-actions { width: 100%; justify-content: space-between; }
             .chart-actions .btn { flex: 0 1 auto; }
             .modal-content { width: 95%; box-sizing: border-box; padding: 15px; }
-            .vm-item { flex-direction: column; align-items: flex-start; gap: 8px; }
-            .vm-item button { align-self: flex-end; }
+            .vm-item { padding: 10px 0; }
         }
 
         /* Modal */
@@ -359,8 +358,9 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 5px 0;
+            padding: 12px 0;
             border-bottom: 1px solid var(--border-color);
+            gap: 10px;
         }
         .vm-item:last-child { border-bottom: none; }
     </style>
@@ -965,22 +965,37 @@
                 const div = document.createElement('div');
                 div.className = 'vm-item';
 
-                const span = document.createElement('span');
-                span.style.borderLeft = `10px solid ${config.color || '#ccc'}`;
-                span.style.paddingLeft = '10px';
+                const content = document.createElement('div');
+                content.style.display = 'flex';
+                content.style.alignItems = 'flex-start';
+                content.style.gap = '10px';
+                content.style.flexGrow = '1';
+
+                const indicator = document.createElement('div');
+                indicator.style.width = '10px';
+                indicator.style.minWidth = '10px';
+                indicator.style.height = '1.2em';
+                indicator.style.backgroundColor = config.color || '#ccc';
+                indicator.style.borderRadius = '2px';
+                indicator.style.marginTop = '2px';
+                content.appendChild(indicator);
+
+                const info = document.createElement('div');
+                info.style.flexGrow = '1';
 
                 const strong = document.createElement('strong');
                 strong.textContent = config.displayName || key;
-                span.appendChild(strong);
+                info.appendChild(strong);
 
-                span.appendChild(document.createTextNode(` (${key})`));
-                span.appendChild(document.createElement('br'));
+                info.appendChild(document.createTextNode(` (${key})`));
+                info.appendChild(document.createElement('br'));
 
                 const small = document.createElement('small');
                 small.textContent = `Order: ${config.order ?? 0} | ${config.hidden ? 'Hidden' : 'Visible'}`;
-                span.appendChild(small);
+                info.appendChild(small);
 
-                div.appendChild(span);
+                content.appendChild(info);
+                div.appendChild(content);
 
                 const btn = document.createElement('button');
                 btn.className = 'btn btn-small';

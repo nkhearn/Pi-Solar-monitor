@@ -2,7 +2,7 @@ import sqlite3
 import json
 import asyncio
 import threading
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Annotated
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -234,12 +234,12 @@ def _execute_query_all(query, params):
 @app.get("/api/data/{key}/history")
 async def get_data_history(
     key: str,
-    start: Optional[str] = Query(None),
-    end: Optional[str] = Query(None),
-    gt: Optional[float] = Query(None),
-    lt: Optional[float] = Query(None),
-    eq: Optional[float] = Query(None),
-    limit: int = Query(100)
+    start: Annotated[Optional[str], Query()] = None,
+    end: Annotated[Optional[str], Query()] = None,
+    gt: Annotated[Optional[float], Query()] = None,
+    lt: Annotated[Optional[float], Query()] = None,
+    eq: Annotated[Optional[float], Query()] = None,
+    limit: Annotated[int, Query()] = 100
 ):
     v_metrics = await get_virtual_metrics_map()
     query, params = build_data_query(key, v_metrics, start, end, gt, lt, eq, limit)
@@ -254,11 +254,11 @@ async def get_data_history(
 @app.get("/api/data/{key}/stats")
 async def get_data_stats(
     key: str,
-    start: Optional[str] = Query(None),
-    end: Optional[str] = Query(None),
-    gt: Optional[float] = Query(None),
-    lt: Optional[float] = Query(None),
-    eq: Optional[float] = Query(None)
+    start: Annotated[Optional[str], Query()] = None,
+    end: Annotated[Optional[str], Query()] = None,
+    gt: Annotated[Optional[float], Query()] = None,
+    lt: Annotated[Optional[float], Query()] = None,
+    eq: Annotated[Optional[float], Query()] = None
 ):
     v_metrics = await get_virtual_metrics_map()
     params = []
@@ -336,11 +336,11 @@ async def get_data_stats(
 async def get_data_single_stat(
     key: str,
     stat_key: str,
-    start: Optional[str] = Query(None),
-    end: Optional[str] = Query(None),
-    gt: Optional[float] = Query(None),
-    lt: Optional[float] = Query(None),
-    eq: Optional[float] = Query(None)
+    start: Annotated[Optional[str], Query()] = None,
+    end: Annotated[Optional[str], Query()] = None,
+    gt: Annotated[Optional[float], Query()] = None,
+    lt: Annotated[Optional[float], Query()] = None,
+    eq: Annotated[Optional[float], Query()] = None
 ):
     valid_stats = {"avg", "min", "max", "sum", "count"}
     if stat_key not in valid_stats:
@@ -358,10 +358,10 @@ async def get_data_single_stat(
 
 @app.get("/api/chart/data")
 async def get_chart_data(
-    chart_type: str = Query(..., alias="type", pattern="^(line|gauge)$"),
-    metric: str = Query(...),
-    period: Optional[str] = Query(None),
-    limit: int = Query(100)
+    chart_type: Annotated[str, Query(alias="type", pattern="^(line|gauge)$")],
+    metric: Annotated[str, Query()],
+    period: Annotated[Optional[str], Query()] = None,
+    limit: Annotated[int, Query()] = 100
 ):
     """
     Unified endpoint for external chart data access.
