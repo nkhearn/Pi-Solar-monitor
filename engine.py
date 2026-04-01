@@ -4,7 +4,7 @@ import subprocess
 import sqlite3
 import time
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 try:
     import api  # Import our api module to notify websockets
 except ImportError:
@@ -139,7 +139,8 @@ async def collect_now(run_hourly=False, run_daily=False):
     """
     Performs a single collection cycle.
     """
-    print(f"Collecting data at {datetime.now()} (hourly={run_hourly}, daily={run_daily})")
+    now_utc = datetime.now(timezone.utc)
+    print(f"Collecting data at {now_utc} UTC (hourly={run_hourly}, daily={run_daily})")
     data = await collect_all(run_hourly=run_hourly, run_daily=run_daily)
     if data:
         # Pass copies of data to avoid race conditions and data leakage between tasks.
@@ -154,7 +155,7 @@ async def collect_now(run_hourly=False, run_daily=False):
         # Notify websockets
         if api:
             notify_tasks.append(api.notify_new_data({
-                "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%f'),
+                "timestamp": now_utc.strftime('%Y-%m-%d %H:%M:%f'),
                 "data": data.copy()
             }))
         else:

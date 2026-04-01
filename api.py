@@ -6,7 +6,7 @@ from typing import List, Optional, Any, Dict, Annotated
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 import ast
 
@@ -494,8 +494,9 @@ async def websocket_endpoint(websocket: WebSocket):
 def parse_relative_time(time_str: str) -> str:
     if not time_str:
         return None
+    now_utc = datetime.now(timezone.utc)
     if time_str.lower() == "today":
-        return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%f')
+        return now_utc.replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%f')
     match = re.match(r'^(\d+)([smhd])$', time_str.lower())
     if match:
         value, unit = match.groups()
@@ -504,7 +505,7 @@ def parse_relative_time(time_str: str) -> str:
         elif unit == 'm': delta = timedelta(minutes=value)
         elif unit == 'h': delta = timedelta(hours=value)
         elif unit == 'd': delta = timedelta(days=value)
-        return (datetime.now() - delta).strftime('%Y-%m-%d %H:%M:%f')
+        return (now_utc - delta).strftime('%Y-%m-%d %H:%M:%f')
     return time_str
 
 def build_data_query(
