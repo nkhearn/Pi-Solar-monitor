@@ -316,7 +316,7 @@ async def get_data_stats(
         params.append(end_ts)
 
     if gt is not None:
-        if key in v_metrics or key in generated_columns:
+        if key in v_metrics or key in GENERATED_COLUMNS:
             conditions.append(f"{sql_expr} > ?")
         else:
             conditions.append("json_extract(data, ?) > ?")
