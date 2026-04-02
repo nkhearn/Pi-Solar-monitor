@@ -537,7 +537,7 @@
             // Some Python parts of the backend use '%Y-%m-%d %H:%M:%f' which omits seconds.
             // We ensure the format is 'YYYY-MM-DDTHH:MM:SS.mmmmmmZ' for consistent parsing.
             let isoStr = ts.replace(' ', 'T');
-            const timePart = isoStr.split('T')[1];
+            const timePart = isoStr.split('T')[1] || '';
             const parts = timePart.split(':');
 
             if (parts.length === 2) {
