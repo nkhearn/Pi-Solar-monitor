@@ -534,9 +534,33 @@
         function parseBackendTimestamp(ts) {
             if (!ts) return null;
             // The backend returns UTC timestamps in 'YYYY-MM-DD HH:MM:SS.mmmmmm' format.
-            // Converting to 'YYYY-MM-DDTHH:MM:SS.mmmmmmZ' ensures Date() treats it as UTC.
-            const isoStr = ts.replace(' ', 'T') + 'Z';
-            return new Date(isoStr);
+            // Some Python parts of the backend use '%Y-%m-%d %H:%M:%f' which omits seconds.
+            // We ensure the format is 'YYYY-MM-DDTHH:MM:SS.mmmmmmZ' for consistent parsing.
+            let isoStr = ts.replace(' ', 'T');
+            const timePart = isoStr.split('T')[1] || '';
+            const parts = timePart.split(':');
+
+            if (parts.length === 2) {
+                // Format: HH:MM.mmmmmm (missing seconds)
+                const datePart = isoStr.split('T')[0];
+                const hour = parts[0];
+                const minuteAndMicro = parts[1].split('.');
+                const minute = minuteAndMicro[0];
+                const micro = minuteAndMicro[1] || '000000';
+                isoStr = `${datePart}T${hour}:${minute}:00.${micro}`;
+            } else if (parts.length === 3 && parts[2].indexOf('.') === -1 && parts[2].length > 2) {
+                // Format: HH:MM:mmmmmm (Python's %f without preceding second field, e.g. from mistake)
+                // Actually, if Python uses %M:%f, it becomes MM:mmmmmm, so HH:MM:mmmmmm
+                const datePart = isoStr.split('T')[0];
+                const hour = parts[0];
+                const minute = parts[1];
+                const micro = parts[2];
+                isoStr = `${datePart}T${hour}:${minute}:00.${micro}`;
+            }
+
+            if (!isoStr.endsWith('Z')) isoStr += 'Z';
+            const date = new Date(isoStr);
+            return isNaN(date.getTime()) ? null : date;
         }
 
         function formatTimestamp(ts) {

@@ -155,7 +155,7 @@ async def collect_now(run_hourly=False, run_daily=False):
         # Notify websockets
         if api:
             notify_tasks.append(api.notify_new_data({
-                "timestamp": now_utc.strftime('%Y-%m-%d %H:%M:%f'),
+                "timestamp": now_utc.strftime('%Y-%m-%d %H:%M:%S.%f'),
                 "data": data.copy()
             }))
         else:
