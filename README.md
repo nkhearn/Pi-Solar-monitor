@@ -17,10 +17,11 @@ The system periodically polls various data sources via custom "collectors", stor
 <video src="screenshots/dashboard_demo.webm" autoplay loop muted playsinline controls width="100%">
 </video>
 
-### Dashboard
-| Light Mode | Dark Mode |
-| :---: | :---: |
-| ![Dashboard Light](screenshots/dashboard_light.png) | ![Dashboard Dark](screenshots/dashboard_dark.png) |
+### Images
+| Light Mode | Dark Mode | Performance |
+| :---: | :---: | :---: |
+| ![Dashboard Light](screenshots/dashboard_light.png) | ![Dashboard Dark](screenshots/dashboard_dark.png) | ![Performance](https://github.com/user-attachments/assets/949d9320-309f-4711-af5c-8a3c5f5971aa) |
+
 
 ## ✨ Features
 
