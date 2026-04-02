@@ -7,6 +7,8 @@ def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+
+    # Create table if it doesn't exist (fresh install)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS data_points (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -14,8 +16,28 @@ def init_db():
             data TEXT
         )
     ''')
+
+    # Migration for existing databases: check for generated columns and add if missing
+    cursor.execute("PRAGMA table_info(data_points)")
+    columns = [row[1] for row in cursor.fetchall()]
+
+    migrations = [
+        ("pv_voltage", "REAL GENERATED ALWAYS AS (json_extract(data, '$.pv_voltage')) VIRTUAL"),
+        ("pv_power", "REAL GENERATED ALWAYS AS (json_extract(data, '$.pv_power')) VIRTUAL"),
+        ("battery_voltage", "REAL GENERATED ALWAYS AS (json_extract(data, '$.battery_voltage')) VIRTUAL")
+    ]
+
+    for col_name, col_def in migrations:
+        if col_name not in columns:
+            print(f"Migrating: Adding column {col_name} to data_points")
+            cursor.execute(f"ALTER TABLE data_points ADD COLUMN {col_name} {col_def}")
+
     # Index for faster time-range queries
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON data_points(timestamp)')
+    # Indexes on frequently queried metrics to reduce disk I/O
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pv_voltage ON data_points(pv_voltage) WHERE pv_voltage IS NOT NULL')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_pv_power ON data_points(pv_power) WHERE pv_power IS NOT NULL')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_battery_voltage ON data_points(battery_voltage) WHERE battery_voltage IS NOT NULL')
 
     # Table for virtual metrics
     cursor.execute('''

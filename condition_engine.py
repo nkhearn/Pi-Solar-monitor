@@ -119,7 +119,13 @@ class ConditionEngine:
 
         # Sort paths by length descending to avoid partial replacement issues
         for path in sorted(set(paths), key=len, reverse=True):
-            val = await self.evaluate_path(path, current_data=current_data)
+            if hasattr(self, '_current_eval_cache') and path in self._current_eval_cache:
+                val = self._current_eval_cache[path]
+            else:
+                val = await self.evaluate_path(path, current_data=current_data)
+                if hasattr(self, '_current_eval_cache'):
+                    self._current_eval_cache[path] = val
+
             if val is None:
                 raise ValueError(f"Data not available for {path}")
 
@@ -208,69 +214,76 @@ class ConditionEngine:
         if not os.path.exists(cond_dir):
             return
 
-        for filename in os.listdir(cond_dir):
-            if filename.endswith(".cond"):
-                filepath = os.path.join(cond_dir, filename)
-                try:
-                    mtime = os.path.getmtime(filepath)
-                    cached = self._config_cache.get(filename)
+        # Optimization: Use a local cache for API evaluations within this single call
+        # to avoid redundant calls to api.py functions for the same data
+        self._current_eval_cache = {}
 
-                    if cached and cached['mtime'] == mtime:
-                        config = cached['config']
-                    else:
-                        config = self.parse_file(filepath)
-                        self._config_cache[filename] = {
-                            'mtime': mtime,
-                            'config': config
-                        }
+        try:
+            for filename in os.listdir(cond_dir):
+                if filename.endswith(".cond"):
+                    filepath = os.path.join(cond_dir, filename)
+                    try:
+                        mtime = os.path.getmtime(filepath)
+                        cached = self._config_cache.get(filename)
 
-                    if not config['action']:
-                        continue
+                        if cached and cached['mtime'] == mtime:
+                            config = cached['config']
+                        else:
+                            config = self.parse_file(filepath)
+                            self._config_cache[filename] = {
+                                'mtime': mtime,
+                                'config': config
+                            }
 
-                    now = time.time()
-                    last_exec = self.cooldowns.get(filename, 0)
-                    cooldown_sec = parse_duration(config['cooldown'])
+                        if not config['action']:
+                            continue
 
-                    if now - last_exec < cooldown_sec:
-                        continue
+                        now = time.time()
+                        last_exec = self.cooldowns.get(filename, 0)
+                        cooldown_sec = parse_duration(config['cooldown'])
 
-                    or_passed = True
-                    if config['or']:
-                        or_passed = False
-                        for expr in config['or']:
-                            try:
-                                if await self.process_expression(expr, current_data=current_data):
-                                    or_passed = True
-                                    break
-                            except Exception as e:
-                                # print(f"OR Condition error in {filename}: {e}")
-                                pass
+                        if now - last_exec < cooldown_sec:
+                            continue
 
-                    and_passed = True
-                    if config['and']:
-                        for expr in config['and']:
-                            try:
-                                if not await self.process_expression(expr, current_data=current_data):
+                        or_passed = True
+                        if config['or']:
+                            or_passed = False
+                            for expr in config['or']:
+                                try:
+                                    if await self.process_expression(expr, current_data=current_data):
+                                        or_passed = True
+                                        break
+                                except Exception as e:
+                                    # print(f"OR Condition error in {filename}: {e}")
+                                    pass
+
+                        and_passed = True
+                        if config['and']:
+                            for expr in config['and']:
+                                try:
+                                    if not await self.process_expression(expr, current_data=current_data):
+                                        and_passed = False
+                                        break
+                                except Exception as e:
+                                    # print(f"AND Condition error in {filename}: {e}")
                                     and_passed = False
                                     break
+
+                        if or_passed and and_passed:
+                            print(f"Condition MET for {filename}: {config['action']}")
+                            # Execute action asynchronously
+                            try:
+                                await asyncio.create_subprocess_shell(config['action'])
                             except Exception as e:
-                                # print(f"AND Condition error in {filename}: {e}")
-                                and_passed = False
-                                break
+                                print(f"Failed to execute action for {filename}: {e}")
 
-                    if or_passed and and_passed:
-                        print(f"Condition MET for {filename}: {config['action']}")
-                        # Execute action asynchronously
-                        try:
-                            await asyncio.create_subprocess_shell(config['action'])
-                        except Exception as e:
-                            print(f"Failed to execute action for {filename}: {e}")
+                            self.cooldowns[filename] = now
+                            self.save_cooldowns()
 
-                        self.cooldowns[filename] = now
-                        self.save_cooldowns()
-
-                except Exception as e:
-                    print(f"Error processing condition file {filename}: {e}")
+                    except Exception as e:
+                        print(f"Error processing condition file {filename}: {e}")
+        finally:
+            del self._current_eval_cache
 
 # Global instance for easy use
 engine = ConditionEngine()
