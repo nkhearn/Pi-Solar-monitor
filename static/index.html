@@ -559,7 +559,8 @@
             }
 
             if (!isoStr.endsWith('Z')) isoStr += 'Z';
-            return new Date(isoStr);
+            const date = new Date(isoStr);
+            return isNaN(date.getTime()) ? null : date;
         }
 
         function formatTimestamp(ts) {
