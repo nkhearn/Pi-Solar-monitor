@@ -20,7 +20,7 @@ The system periodically polls various data sources via custom "collectors", stor
 ### Images
 | Light Mode | Dark Mode | Performance |
 | :---: | :---: | :---: |
-| ![Dashboard Light](screenshots/dashboard_light.png) | ![Dashboard Dark](screenshots/dashboard_dark.png) | ![Performance](https://github.com/user-attachments/assets/949d9320-309f-4711-af5c-8a3c5f5971aa) |
+| ![Dashboard Light](screenshots/dashboard_light.png) | ![Dashboard Dark](screenshots/dashboard_dark.png) | ![Performance](https://github.com/user-attachments/assets/5bbd8089-b630-489c-9699-f6c0312747c0) |
 
 
 ## ✨ Features
