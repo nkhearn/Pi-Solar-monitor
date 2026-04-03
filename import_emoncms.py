@@ -8,6 +8,7 @@ import struct
 import datetime
 import math
 from pathlib import Path
+import re
 
 # Constants
 SQLITE_DB_PATH = "data/inverter_logs.db"
@@ -16,6 +17,16 @@ TIME_WINDOW_SECONDS = 60
 
 # --- Helper functions ---
 
+def sanitize_column_name(name):
+    """
+    Sanitizes a name for use as a SQL column name.
+    Matches engine.py and api.py implementation.
+    """
+    sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    if sanitized and sanitized[0].isdigit():
+        sanitized = "_" + sanitized
+    return sanitized.lower()
+
 def init_sqlite_db():
     os.makedirs(os.path.dirname(SQLITE_DB_PATH), exist_ok=True)
     conn = sqlite3.connect(SQLITE_DB_PATH)
@@ -23,8 +34,7 @@ def init_sqlite_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS data_points (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
-            data TEXT
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON data_points(timestamp)')
@@ -72,8 +82,6 @@ def get_feeds_metadata(mysql_conn):
     return feeds
 
 def read_phpfina(feed_id, data_path, start_ts, end_ts):
-    # PHPFINA format: 4-byte float values
-    # Metadata in .meta file: interval(4), start_time(4)
     meta_path = Path(data_path) / f"phpfina/{feed_id}.meta"
     dat_file_path = Path(data_path) / f"phpfina/{feed_id}.dat"
 
@@ -87,7 +95,6 @@ def read_phpfina(feed_id, data_path, start_ts, end_ts):
 
     points = []
     with open(dat_file_path, "rb") as f:
-        # Calculate start and end positions
         start_idx = max(0, int((start_ts - start_time) / interval))
         end_idx = int((end_ts - start_time) / interval)
 
@@ -97,7 +104,6 @@ def read_phpfina(feed_id, data_path, start_ts, end_ts):
             if not val_bytes or len(val_bytes) < 4:
                 break
             val = struct.unpack("f", val_bytes)[0]
-            # Filter out NaNs (EmonCMS uses NaN for missing data)
             if not math.isnan(val):
                 ts = start_time + (i * interval)
                 points.append((ts, val))
@@ -105,7 +111,6 @@ def read_phpfina(feed_id, data_path, start_ts, end_ts):
 
 def read_mysql_feed(mysql_conn, feed_id, start_ts, end_ts):
     cursor = mysql_conn.cursor()
-    # EmonCMS table name for MySQL engine is usually feed_ID
     table_name = f"feed_{feed_id}"
     try:
         cursor.execute(f"SELECT time, value FROM {table_name} WHERE time >= %s AND time <= %s", (start_ts, end_ts))
@@ -115,12 +120,9 @@ def read_mysql_feed(mysql_conn, feed_id, start_ts, end_ts):
     finally:
         cursor.close()
 
-# --- Main Logic ---
-
 def main():
     print("=== EmonCMS to SQLite Migration Utility ===")
 
-    # 1. Connection Details
     host = input("EmonCMS MySQL Host [localhost]: ") or "localhost"
     user = input("EmonCMS MySQL User: ")
     password = input("EmonCMS MySQL Password: ")
@@ -132,7 +134,6 @@ def main():
         print(f"Error connecting to MySQL: {e}")
         return
 
-    # 2. Date Range
     print("\n--- Date Range Selection ---")
     mode = input("Import (A)ll time or (D)ate range? [A/D]: ").upper()
     start_ts, end_ts = 0, int(datetime.datetime.now(datetime.timezone.utc).timestamp())
@@ -143,29 +144,38 @@ def main():
         start_ts = int(datetime.datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc).timestamp())
         end_ts = int(datetime.datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc).timestamp())
 
-    # 3. Key Discovery & Mapping
     target_keys = discover_collector_keys()
     feeds = get_feeds_metadata(mysql_conn)
 
     print("\n--- Map EmonCMS Feeds to SQLite Keys ---")
-    mapping = {} # feed_id -> (target_key, engine)
+    mapping = {}
     for feed in feeds:
         print(f"\nFeed ID: {feed['id']}, Name: {feed['name']}, Tag: {feed['tag']}")
         print(f"Available keys: {', '.join(target_keys)}")
         choice = input(f"Map '{feed['name']}' to which key? (leave blank to skip): ").strip()
         if choice in target_keys:
-            mapping[feed['id']] = (choice, feed['engine'])
+            mapping[feed['id']] = (sanitize_column_name(choice), feed['engine'])
         elif choice:
-            print(f"Warning: '{choice}' is not a discovered key, but using it anyway.")
-            mapping[feed['id']] = (choice, feed['engine'])
+            sanitized = sanitize_column_name(choice)
+            print(f"Warning: '{choice}' is not a discovered key, using sanitized version '{sanitized}'.")
+            mapping[feed['id']] = (sanitized, feed['engine'])
 
     if not mapping:
         print("No mappings created. Exiting.")
         return
 
-    # 4. Initialize/Check SQLite
     sqlite_conn = init_sqlite_db()
     cursor = sqlite_conn.cursor()
+
+    # Ensure all target columns exist
+    cursor.execute("PRAGMA table_info(data_points)")
+    existing_cols = [row[1] for row in cursor.fetchall()]
+    for target_key, _ in mapping.values():
+        if target_key not in existing_cols:
+            print(f"Adding column {target_key}")
+            cursor.execute(f"ALTER TABLE data_points ADD COLUMN {target_key} REAL")
+            existing_cols.append(target_key)
+
     cursor.execute("SELECT count(*) FROM data_points")
     if cursor.fetchone()[0] > 0:
         action = input("\nSQLite database already contains data. (A)ppend or (C)lear? [A/C]: ").upper()
@@ -174,26 +184,22 @@ def main():
             sqlite_conn.commit()
             print("Database cleared.")
 
-    # 5. Data Extraction & Merging
     print("\n--- Extracting and Merging Data ---")
 
-    # Find EmonCMS data path if needed
     data_path = DEFAULT_EMONCMS_PATH
-    if any(m[1] == 6 for m in mapping.values()): # Engine 6 is PHPFINA
+    if any(m[1] == 6 for m in mapping.values()):
         if not os.path.exists(os.path.join(data_path, "phpfina")):
             print(f"Warning: EmonCMS data path '{data_path}/phpfina' not found.")
             data_path = input(f"Please enter correct base path (containing phpfina/): ")
 
-    # We'll fetch data for each mapped feed and group them by 60s window
-    # To be efficient, we'll store all points in a dictionary: { rounded_ts: { key: val } }
     merged_data = {}
 
     for feed_id, (target_key, engine) in mapping.items():
         print(f"Fetching data for feed {feed_id} ({target_key})...")
         points = []
-        if engine == 6: # PHPFINA
+        if engine == 6:
             points = read_phpfina(feed_id, data_path, start_ts, end_ts)
-        elif engine == 0: # MySQL
+        elif engine == 0:
             points = read_mysql_feed(mysql_conn, feed_id, start_ts, end_ts)
 
         for ts, val in points:
@@ -202,16 +208,19 @@ def main():
                 merged_data[rounded_ts] = {}
             merged_data[rounded_ts][target_key] = val
 
-    # 6. Insertion into SQLite
     print(f"Merging complete. Inserting {len(merged_data)} entries into SQLite...")
 
     sorted_timestamps = sorted(merged_data.keys())
     for ts in sorted_timestamps:
-        # Create YYYY-MM-DD HH:MM:SS.SSS format (3-digit milliseconds)
         dt = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
-        dt_str = dt.strftime('%Y-%m-%d %H:%M:%S.000')
-        data_json = json.dumps(merged_data[ts])
-        cursor.execute("INSERT INTO data_points (timestamp, data) VALUES (?, ?)", (dt_str, data_json))
+        dt_str = dt.strftime('%Y-%m-%d %H:%M:%S') # Second precision
+
+        row_data = merged_data[ts]
+        cols = list(row_data.keys())
+        placeholders = ",".join(["?"] * len(cols))
+
+        query = f"INSERT INTO data_points (timestamp, {','.join(cols)}) VALUES (?, {placeholders})"
+        cursor.execute(query, [dt_str] + list(row_data.values()))
 
     sqlite_conn.commit()
     sqlite_conn.close()

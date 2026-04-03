@@ -13,9 +13,6 @@ import ast
 
 DB_PATH = "data/inverter_logs.db"
 
-# Shared persistent database connection for the API process
-# Use check_same_thread=False to allow multiple concurrent requests to use the same connection
-# SQLite's WAL mode and our PRAGMA settings handle concurrency safely
 _db_conn = None
 _db_lock = threading.Lock()
 
@@ -29,7 +26,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory storage for active websocket connections
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -50,18 +46,13 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# Simple in-memory cache for virtual metrics, SQL expressions, and compiled formulas
 _virtual_metrics_cache = None
 _sql_expressions_cache = {}
 _compiled_formulas_cache = {}
 
-# Short-lived cache for statistical queries to reduce disk I/O on the Pi Zero 2 W
-# Format: {(key, stat_key, start, end, gt, lt, eq): (timestamp, result)}
 _stats_cache = {}
-STATS_CACHE_TTL = 30  # seconds
-STATS_CACHE_MAX_SIZE = 100 # Simple limit to prevent memory growth
-
-GENERATED_COLUMNS = {"pv_voltage", "pv_power", "battery_voltage"}
+STATS_CACHE_TTL = 30
+STATS_CACHE_MAX_SIZE = 100
 
 def get_db_connection():
     global _db_conn
@@ -70,10 +61,9 @@ def get_db_connection():
             if _db_conn is None:
                 _db_conn = sqlite3.connect(DB_PATH, check_same_thread=False)
                 _db_conn.row_factory = sqlite3.Row
-                # Performance optimizations for SQLite (WAL is already set at DB init)
                 _db_conn.execute('PRAGMA synchronous=NORMAL')
-                _db_conn.execute('PRAGMA cache_size=-10000')  # 10MB cache for faster lookups
-                _db_conn.execute('PRAGMA mmap_size=268435456') # 256MB mmap for faster disk access
+                _db_conn.execute('PRAGMA cache_size=-10000')
+                _db_conn.execute('PRAGMA mmap_size=268435456')
     return _db_conn
 
 def _get_virtual_metrics_from_db():
@@ -100,10 +90,6 @@ def invalidate_vm_cache():
     _compiled_formulas_cache = {}
 
 def is_safe_formula(formula: str):
-    """
-    Checks if a formula is safe to evaluate using ast.parse.
-    Only allows basic math and alphanumeric characters.
-    """
     if not re.match(r'^[a-zA-Z0-9_+*/() \-.]+$', formula):
         return False
     if '__' in formula:
@@ -120,10 +106,19 @@ def is_safe_formula(formula: str):
     except Exception:
         return False
 
+def sanitize_column_name(name):
+    """
+    Sanitizes a name for use as a SQL column name.
+    Must match engine.py implementation.
+    """
+    sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    if sanitized and sanitized[0].isdigit():
+        sanitized = "_" + sanitized
+    return sanitized.lower()
+
 def formula_to_sql(formula: str):
     """
-    Converts a formula like (m1 + m2) / m3 into a SQLite JSON extraction expression.
-    Caches results for performance.
+    Converts a formula like (m1 + m2) / m3 into a SQLite expression based on columns.
     """
     if formula in _sql_expressions_cache:
         return _sql_expressions_cache[formula]
@@ -133,16 +128,14 @@ def formula_to_sql(formula: str):
 
     sql_expression = formula
     for m in metrics:
-        sql_expression = re.sub(r'\b' + re.escape(m) + r'\b', f"CAST(json_extract(data, '$.{m}') AS REAL)", sql_expression)
+        # Sanitize metric names to match column names
+        sanitized = sanitize_column_name(m)
+        sql_expression = re.sub(r'\b' + re.escape(m) + r'\b', f"IFNULL({sanitized}, 0)", sql_expression)
 
     _sql_expressions_cache[formula] = sql_expression
     return sql_expression
 
 def evaluate_formula(formula: str, data: dict):
-    """
-    Safely evaluates a virtual metric formula using the provided data.
-    Caches compiled code and metric names for performance.
-    """
     global _compiled_formulas_cache
     if formula not in _compiled_formulas_cache:
         if not is_safe_formula(formula):
@@ -161,8 +154,13 @@ def evaluate_formula(formula: str, data: dict):
 
     code, metrics = cached
     try:
-        # Build local namespace for eval
-        context = {m: float(data.get(m, 0)) for m in metrics}
+        # Build local namespace for eval - handle original keys and sanitized keys
+        context = {}
+        for m in metrics:
+            val = data.get(m)
+            if val is None:
+                val = data.get(sanitize_column_name(m), 0)
+            context[m] = float(val)
         return eval(code, {"__builtins__": {}}, context)
     except Exception:
         pass
@@ -178,34 +176,31 @@ def _get_last_from_db():
 async def get_last():
     row = await asyncio.to_thread(_get_last_from_db)
     if row:
-        data = json.loads(row["data"])
+        data = dict(row)
+        # Remove 'id' and 'timestamp' from data part
+        timestamp = data.pop("timestamp")
+        data.pop("id")
+
         v_metrics = await get_virtual_metrics_map()
         if v_metrics:
             for name, formula in v_metrics.items():
                 data[name] = evaluate_formula(formula, data)
 
-        return {"timestamp": row["timestamp"], "data": data}
+        return {"timestamp": timestamp, "data": data}
     return {"error": "No data available"}
 
 def _get_keys_from_db():
     conn = get_db_connection()
     cursor = conn.cursor()
-    query = """
-    SELECT DISTINCT json_each.key
-    FROM data_points, json_each(data_points.data)
-    WHERE data_points.id IN (SELECT id FROM data_points ORDER BY timestamp DESC LIMIT 100)
-    """
-    cursor.execute(query)
-    return cursor.fetchall()
+    cursor.execute("PRAGMA table_info(data_points)")
+    rows = cursor.fetchall()
+    return [row[1] for row in rows if row[1] not in ('id', 'timestamp')]
 
 @app.get("/api/keys")
 async def get_keys():
-    rows = await asyncio.to_thread(_get_keys_from_db)
-    keys = [row[0] for row in rows]
-
+    keys = await asyncio.to_thread(_get_keys_from_db)
     v_metrics = await get_virtual_metrics_map()
     keys.extend(v_metrics.keys())
-
     return sorted(list(set(keys)))
 
 def _execute_query_one(query, params):
@@ -217,23 +212,22 @@ def _execute_query_one(query, params):
 @app.get("/api/data/{key}/last")
 async def get_data_last(key: str):
     v_metrics = await get_virtual_metrics_map()
+    sanitized_key = sanitize_column_name(key)
 
     if key in v_metrics:
         sql_expr = formula_to_sql(v_metrics[key])
-        query = f"SELECT timestamp, {sql_expr} as value FROM data_points WHERE {sql_expr} IS NOT NULL ORDER BY timestamp DESC LIMIT 1"
-        params = []
-    elif key in GENERATED_COLUMNS:
-        query = f"SELECT timestamp, {key} as value FROM data_points WHERE {key} IS NOT NULL ORDER BY timestamp DESC LIMIT 1"
-        params = []
     else:
-        # Restore parameter substitution for JSON path to prevent SQL injection
-        query = "SELECT timestamp, json_extract(data, ?) as value FROM data_points WHERE json_extract(data, ?) IS NOT NULL ORDER BY timestamp DESC LIMIT 1"
-        params = [f"$.{key}", f"$.{key}"]
+        sql_expr = sanitized_key
+
+    query = f"SELECT timestamp, {sql_expr} as value FROM data_points WHERE {sql_expr} IS NOT NULL ORDER BY timestamp DESC LIMIT 1"
 
     try:
-        row = await asyncio.to_thread(_execute_query_one, query, params)
+        row = await asyncio.to_thread(_execute_query_one, query, [])
     except sqlite3.OperationalError as e:
-        raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
+        # Might happen if column doesn't exist yet
+        if "no such column" in str(e):
+             return {"timestamp": None, "value": None}
+        raise HTTPException(status_code=400, detail=f"Error querying data: {e}")
 
     if row:
         return {"timestamp": row["timestamp"], "value": row["value"]}
@@ -256,12 +250,13 @@ async def get_data_history(
     limit: Annotated[int, Query()] = 100
 ):
     v_metrics = await get_virtual_metrics_map()
-    query, params = build_data_query(key, v_metrics, start, end, gt, lt, eq, limit)
-
     try:
+        query, params = build_data_query(key, v_metrics, start, end, gt, lt, eq, limit)
         rows = await asyncio.to_thread(_execute_query_all, query, params)
     except sqlite3.OperationalError as e:
-        raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
+        if "no such column" in str(e):
+             return []
+        raise HTTPException(status_code=400, detail=f"Error querying data: {e}")
 
     return [[row["timestamp"], row["value"]] for row in rows]
 
@@ -274,7 +269,6 @@ async def get_data_stats(
     lt: Annotated[Optional[float], Query()] = None,
     eq: Annotated[Optional[float], Query()] = None
 ):
-    # Check cache first
     cache_key = (key, 'all', start, end, gt, lt, eq)
     now = time.time()
     if cache_key in _stats_cache:
@@ -283,15 +277,12 @@ async def get_data_stats(
             return result
 
     v_metrics = await get_virtual_metrics_map()
+    sanitized_key = sanitize_column_name(key)
 
-    params = []
     if key in v_metrics:
         sql_expr = formula_to_sql(v_metrics[key])
-    elif key in GENERATED_COLUMNS:
-        sql_expr = key
     else:
-        sql_expr = "json_extract(data, ?)"
-        params.extend([f"$.{key}"] * 5) # For the 5 aggregations
+        sql_expr = sanitized_key
 
     select_clause = (
         f"AVG({sql_expr}) as avg, "
@@ -302,9 +293,8 @@ async def get_data_stats(
     )
 
     query = f"SELECT {select_clause} FROM data_points"
-
-    # Add conditions
     conditions = []
+    params = []
     start_ts = parse_relative_time(start)
     if start_ts:
         conditions.append("timestamp >= ?")
@@ -316,27 +306,13 @@ async def get_data_stats(
         params.append(end_ts)
 
     if gt is not None:
-        if key in v_metrics or key in GENERATED_COLUMNS:
-            conditions.append(f"{sql_expr} > ?")
-        else:
-            conditions.append("json_extract(data, ?) > ?")
-            params.append(f"$.{key}")
+        conditions.append(f"{sql_expr} > ?")
         params.append(gt)
-
     if lt is not None:
-        if key in v_metrics or key in GENERATED_COLUMNS:
-            conditions.append(f"{sql_expr} < ?")
-        else:
-            conditions.append("json_extract(data, ?) < ?")
-            params.append(f"$.{key}")
+        conditions.append(f"{sql_expr} < ?")
         params.append(lt)
-
     if eq is not None:
-        if key in v_metrics or key in GENERATED_COLUMNS:
-            conditions.append(f"{sql_expr} = ?")
-        else:
-            conditions.append("json_extract(data, ?) = ?")
-            params.append(f"$.{key}")
+        conditions.append(f"{sql_expr} = ?")
         params.append(eq)
 
     if conditions:
@@ -345,7 +321,9 @@ async def get_data_stats(
     try:
         row = await asyncio.to_thread(_execute_query_one, query, params)
     except sqlite3.OperationalError as e:
-        raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
+        if "no such column" in str(e):
+             return {"avg": None, "min": None, "max": None, "sum": None, "count": 0}
+        raise HTTPException(status_code=400, detail=f"Error querying stats: {e}")
 
     if row:
         result = {
@@ -358,7 +336,6 @@ async def get_data_stats(
     else:
         result = {"avg": None, "min": None, "max": None, "sum": None, "count": 0}
 
-    # Evict oldest entry if cache is full
     if len(_stats_cache) >= STATS_CACHE_MAX_SIZE:
         oldest_key = min(_stats_cache.keys(), key=lambda k: _stats_cache[k][0])
         del _stats_cache[oldest_key]
@@ -380,7 +357,6 @@ async def get_data_single_stat(
     if stat_key not in valid_stats:
         raise HTTPException(status_code=400, detail=f"Invalid stat_key: {stat_key}. Available: avg, min, max, sum, count")
 
-    # Check cache first
     cache_key = (key, stat_key, start, end, gt, lt, eq)
     now = time.time()
     if cache_key in _stats_cache:
@@ -389,16 +365,15 @@ async def get_data_single_stat(
             return result
 
     v_metrics = await get_virtual_metrics_map()
-    query, params = build_data_query(key, v_metrics, start, end, gt, lt, eq, aggregate=stat_key)
-
     try:
+        query, params = build_data_query(key, v_metrics, start, end, gt, lt, eq, aggregate=stat_key)
         row = await asyncio.to_thread(_execute_query_one, query, params)
     except sqlite3.OperationalError as e:
-        raise HTTPException(status_code=400, detail=f"Error evaluating virtual metric: {e}")
+        if "no such column" in str(e):
+             return {"value": None}
+        raise HTTPException(status_code=400, detail=f"Error querying stat: {e}")
 
     result = {"value": row["value"]}
-
-    # Evict oldest entry if cache is full
     if len(_stats_cache) >= STATS_CACHE_MAX_SIZE:
         oldest_key = min(_stats_cache.keys(), key=lambda k: _stats_cache[k][0])
         del _stats_cache[oldest_key]
@@ -413,10 +388,6 @@ async def get_chart_data(
     period: Annotated[Optional[str], Query()] = None,
     limit: Annotated[int, Query()] = 100
 ):
-    """
-    Unified endpoint for external chart data access.
-    Supports 'line' (historical) and 'gauge' (latest) chart types.
-    """
     if chart_type == "gauge":
         return await get_data_last(metric)
     elif chart_type == "line":
@@ -441,7 +412,17 @@ async def get_history(start: Optional[str] = Query(None), end: Optional[str] = Q
     params.append(limit)
 
     rows = await asyncio.to_thread(_execute_query_all, query, params)
-    return [{"timestamp": row["timestamp"], "data": json.loads(row["data"])} for row in rows]
+
+    results = []
+    for row in rows:
+        data = dict(row)
+        timestamp = data.pop("timestamp")
+        data.pop("id")
+        # Clean up None values
+        data = {k: v for k, v in data.items() if v is not None}
+        results.append({"timestamp": timestamp, "data": data})
+
+    return results
 
 @app.get("/api/virtual_metrics")
 async def get_virtual_metrics():
@@ -519,7 +500,6 @@ async def get_metric_configs():
 def _save_metric_configs_to_db(configs: Dict[str, Dict]):
     conn = get_db_connection()
     cursor = conn.cursor()
-    # We replace the entire configuration for all metrics passed
     for key, config in configs.items():
         cursor.execute('INSERT OR REPLACE INTO metric_configs (key, config) VALUES (?, ?)', (key, json.dumps(config)))
     conn.commit()
@@ -546,7 +526,7 @@ def parse_relative_time(time_str: str) -> str:
         return None
     now_utc = datetime.now(timezone.utc)
     if time_str.lower() == "today":
-        return now_utc.replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S.%f')
+        return now_utc.replace(hour=0, minute=0, second=0, microsecond=0).strftime('%Y-%m-%d %H:%M:%S')
     match = re.match(r'^(\d+)([smhd])$', time_str.lower())
     if match:
         value, unit = match.groups()
@@ -555,7 +535,7 @@ def parse_relative_time(time_str: str) -> str:
         elif unit == 'm': delta = timedelta(minutes=value)
         elif unit == 'h': delta = timedelta(hours=value)
         elif unit == 'd': delta = timedelta(days=value)
-        return (now_utc - delta).strftime('%Y-%m-%d %H:%M:%S.%f')
+        return (now_utc - delta).strftime('%Y-%m-%d %H:%M:%S')
     return time_str
 
 def build_data_query(
@@ -569,15 +549,11 @@ def build_data_query(
     limit: int = 100,
     aggregate: Optional[str] = None
 ):
-    params = []
-
+    sanitized_key = sanitize_column_name(key)
     if key in v_metrics:
         sql_expr = formula_to_sql(v_metrics[key])
-    elif key in GENERATED_COLUMNS:
-        sql_expr = key
     else:
-        sql_expr = "json_extract(data, ?)"
-        params.append(f"$.{key}")
+        sql_expr = sanitized_key
 
     if aggregate:
         if aggregate == "avg": select_clause = f"AVG({sql_expr}) as value"
@@ -591,6 +567,7 @@ def build_data_query(
         query = f"SELECT timestamp, {sql_expr} as value FROM data_points"
 
     conditions = []
+    params = []
     start_ts = parse_relative_time(start)
     if start_ts:
         conditions.append("timestamp >= ?")
@@ -601,25 +578,13 @@ def build_data_query(
         params.append(end_ts)
 
     if gt is not None:
-        if key in v_metrics or key in GENERATED_COLUMNS:
-            conditions.append(f"{sql_expr} > ?")
-        else:
-            conditions.append("json_extract(data, ?) > ?")
-            params.append(f"$.{key}")
+        conditions.append(f"{sql_expr} > ?")
         params.append(gt)
     if lt is not None:
-        if key in v_metrics or key in GENERATED_COLUMNS:
-            conditions.append(f"{sql_expr} < ?")
-        else:
-            conditions.append("json_extract(data, ?) < ?")
-            params.append(f"$.{key}")
+        conditions.append(f"{sql_expr} < ?")
         params.append(lt)
     if eq is not None:
-        if key in v_metrics or key in GENERATED_COLUMNS:
-            conditions.append(f"{sql_expr} = ?")
-        else:
-            conditions.append("json_extract(data, ?) = ?")
-            params.append(f"$.{key}")
+        conditions.append(f"{sql_expr} = ?")
         params.append(eq)
 
     if conditions:
@@ -634,7 +599,6 @@ def build_data_query(
 async def notify_new_data(data_payload):
     v_metrics = await get_virtual_metrics_map()
     if v_metrics:
-        # Create a copy of the payload to avoid side effects on the input
         data_payload = data_payload.copy()
         data = data_payload["data"].copy()
         for name, formula in v_metrics.items():

@@ -4,6 +4,7 @@ import subprocess
 import sqlite3
 import time
 import asyncio
+import re
 from datetime import datetime, timezone
 try:
     import api  # Import our api module to notify websockets
@@ -16,6 +17,17 @@ DB_PATH = "data/inverter_logs.db"
 COLLECTORS_DIR = "collectors"
 # MACRODROID_URL = "https://trigger.macrodroid.com/UUID/power"
 MACRODROID_URL = os.getenv("MACRODROID_URL")
+
+def sanitize_column_name(name):
+    """
+    Sanitizes a name for use as a SQL column name.
+    """
+    # Replace non-alphanumeric characters with underscores
+    sanitized = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+    # Ensure it doesn't start with a number
+    if sanitized and sanitized[0].isdigit():
+        sanitized = "_" + sanitized
+    return sanitized.lower()
 
 async def send_to_macrodroid(payload_dict):
     """
@@ -36,6 +48,7 @@ async def send_to_macrodroid(payload_dict):
             print(f"Macrodroid Error: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Macrodroid Connection Error: {e}")
+
 async def run_collector(filepath, timeout=55):
     """
     Runs an executable and returns its JSON output with a specified timeout.
@@ -97,10 +110,7 @@ async def collect_all(run_hourly=False, run_daily=False):
     """
     Aggregates data from all relevant collector directories based on the schedule.
     """
-    # Minutely and root collectors (55s timeout)
     dirs_55s = [COLLECTORS_DIR, os.path.join(COLLECTORS_DIR, "minutely")]
-
-    # Hourly and Daily collectors (300s timeout)
     dirs_300s = []
     if run_hourly:
         dirs_300s.append(os.path.join(COLLECTORS_DIR, "hourly"))
@@ -121,19 +131,44 @@ async def collect_all(run_hourly=False, run_daily=False):
 
 def save_to_db(data):
     """
-    Saves the aggregated JSON data to SQLite.
+    Saves the aggregated data to SQLite, adding columns as needed.
     """
     if not data:
         return
 
+    # Sanitize and prepare data
+    sanitized_data = {sanitize_column_name(k): v for k, v in data.items()}
+
     conn = sqlite3.connect(DB_PATH)
-    # Optimization: Set synchronous to NORMAL for faster writes.
-    # WAL mode is already set at database creation.
     conn.execute('PRAGMA synchronous=NORMAL')
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO data_points (data) VALUES (?)', (json.dumps(data),))
-    conn.commit()
-    conn.close()
+
+    # Get current columns
+    cursor.execute("PRAGMA table_info(data_points)")
+    existing_columns = [row[1] for row in cursor.fetchall()]
+
+    # Add missing columns
+    for col in sanitized_data.keys():
+        if col not in existing_columns:
+            print(f"Adding new column: {col}")
+            try:
+                cursor.execute(f"ALTER TABLE data_points ADD COLUMN {col} REAL")
+                existing_columns.append(col)
+            except sqlite3.Error as e:
+                print(f"Failed to add column {col}: {e}")
+
+    # Build INSERT query
+    columns = list(sanitized_data.keys())
+    placeholders = ",".join(["?"] * len(columns))
+    query = f"INSERT INTO data_points ({','.join(columns)}) VALUES ({placeholders})"
+
+    try:
+        cursor.execute(query, list(sanitized_data.values()))
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"Error inserting data: {e}")
+    finally:
+        conn.close()
 
 async def collect_now(run_hourly=False, run_daily=False):
     """
@@ -143,35 +178,20 @@ async def collect_now(run_hourly=False, run_daily=False):
     print(f"Collecting data at {now_utc} UTC (hourly={run_hourly}, daily={run_daily})")
     data = await collect_all(run_hourly=run_hourly, run_daily=run_daily)
     if data:
-        # Pass copies of data to avoid race conditions and data leakage between tasks.
-        # api.notify_new_data modifies its input dictionary to add virtual metrics.
-
-        # Save to DB in a separate thread to avoid blocking the main event loop
         db_task = asyncio.to_thread(save_to_db, data.copy())
 
-        # Prepare other notification tasks to run concurrently with the database write
         notify_tasks = []
-
-        # Notify websockets
         if api:
             notify_tasks.append(api.notify_new_data({
-                "timestamp": now_utc.strftime('%Y-%m-%d %H:%M:%S.%f'),
+                "timestamp": now_utc.strftime('%Y-%m-%d %H:%M:%S'), # Second precision as requested
                 "data": data.copy()
             }))
         else:
             print("Skipping websocket notification (api not available)")
 
-        # Send to Macrodroid
         notify_tasks.append(send_to_macrodroid(data))
-
-        # Run database write and notifications concurrently
         await asyncio.gather(db_task, *notify_tasks)
-
-        # Process conditional actions AFTER database write completes to avoid race conditions
-        # (e.g. if conditions query the database for the data point we just saved)
-        # We pass the current data to the condition engine to avoid redundant database lookups
         await condition_engine.engine.process_conditions(current_data=data)
-
         print(f"Data saved and broadcasted: {len(data)} keys")
     else:
         print("No data collected.")
@@ -182,22 +202,17 @@ async def collection_loop():
     """
     print("Starting data collection engine...")
 
-    # On startup, we determine if it's the top of the hour or midnight
     now = datetime.now()
     run_hourly = (now.minute == 0)
     run_daily = (run_hourly and now.hour == 0)
 
-    # Perform an initial collection immediately
     await collect_now(run_hourly=run_hourly, run_daily=run_daily)
 
-    # Track when we last purged old cooldowns
     last_purge_hour = -1
-
     while True:
-        # Align with the next minute mark
         now_ts = time.time()
         sleep_time = 60 - (now_ts % 60)
-        if sleep_time < 1: # avoid double execution if we are very close to the minute mark
+        if sleep_time < 1:
             sleep_time += 60
         await asyncio.sleep(sleep_time)
 
@@ -205,7 +220,6 @@ async def collection_loop():
         run_hourly = (now.minute == 0)
         run_daily = (run_hourly and now.hour == 0)
 
-        # Purge old cooldown entries once per hour
         if now.hour != last_purge_hour:
             condition_engine.engine.purge_old_cooldowns()
             last_purge_hour = now.hour
