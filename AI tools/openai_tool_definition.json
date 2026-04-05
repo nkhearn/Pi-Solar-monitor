@@ -1,0 +1,316 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_available_metrics",
+      "description": "Recommended first step: Retrieve a list of all available metric keys (both physical and virtual). This helps identify which data points can be queried. ALWAYS call this first to understand the available data.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_latest_system_data",
+      "description": "Retrieve the most recent aggregated data point for all metrics in the system.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_system_history",
+      "description": "Retrieve a list of recent aggregated data points for the entire system.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Max number of records to return (default 100)."
+          },
+          "start": {
+            "type": "string",
+            "description": "ISO timestamp (YYYY-MM-DD HH:MM:SS) or relative time (e.g., '1h', '5m', 'today') to filter from."
+          },
+          "end": {
+            "type": "string",
+            "description": "ISO timestamp or relative time to filter until."
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_latest_metric_value",
+      "description": "Retrieve the most recent value for a specific metric.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "metric_key": {
+            "type": "string",
+            "description": "The name of the metric (e.g., 'battery_voltage')."
+          }
+        },
+        "required": ["metric_key"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_metric_history",
+      "description": "Retrieve historical values for a specific metric in a compact format [timestamp, value].",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "metric_key": {
+            "type": "string",
+            "description": "The name of the metric."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max number of records."
+          },
+          "start": {
+            "type": "string",
+            "description": "Start time filter (ISO timestamp or relative like '24h', 'today')."
+          },
+          "end": {
+            "type": "string",
+            "description": "End time filter."
+          },
+          "gt": {
+            "type": "number",
+            "description": "Value must be Greater Than this."
+          },
+          "lt": {
+            "type": "number",
+            "description": "Value must be Less Than this."
+          },
+          "eq": {
+            "type": "number",
+            "description": "Value must be Equal To this."
+          }
+        },
+        "required": ["metric_key"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_metric_stats",
+      "description": "Retrieve aggregate statistics (avg, min, max, sum, count) for a metric over a period.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "metric_key": {
+            "type": "string",
+            "description": "The name of the metric."
+          },
+          "start": {
+            "type": "string",
+            "description": "Start time filter (ISO timestamp or relative like '24h', 'today')."
+          },
+          "end": {
+            "type": "string",
+            "description": "End time filter."
+          },
+          "gt": {
+            "type": "number",
+            "description": "Filter data Greater Than this value before calculating stats."
+          },
+          "lt": {
+            "type": "number",
+            "description": "Filter data Less Than this value before calculating stats."
+          },
+          "eq": {
+            "type": "number",
+            "description": "Filter data Equal To this value before calculating stats."
+          }
+        },
+        "required": ["metric_key"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_specific_metric_stat",
+      "description": "Retrieve a single specific statistic for a metric.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "metric_key": {
+            "type": "string",
+            "description": "The name of the metric."
+          },
+          "stat_key": {
+            "type": "string",
+            "enum": ["avg", "min", "max", "sum", "count"],
+            "description": "The statistic to retrieve."
+          },
+          "start": {
+            "type": "string",
+            "description": "Start time filter."
+          },
+          "end": {
+            "type": "string",
+            "description": "End time filter."
+          }
+        },
+        "required": ["metric_key", "stat_key"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_virtual_metrics",
+      "description": "List all defined virtual metrics and their calculation formulas.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_or_update_virtual_metric",
+      "description": "Create a new virtual metric or update an existing one using a math formula.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name for the virtual metric."
+          },
+          "formula": {
+            "type": "string",
+            "description": "The math formula (e.g., 'pv_power / load')."
+          }
+        },
+        "required": ["name", "formula"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "delete_virtual_metric",
+      "description": "Delete a virtual metric by name.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name of the virtual metric to delete."
+          }
+        },
+        "required": ["name"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_chart_data",
+      "description": "Unified endpoint for retrieving chart data for external visualizations.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "metric": {
+            "type": "string",
+            "description": "Metric key."
+          },
+          "chart_type": {
+            "type": "string",
+            "enum": ["line", "gauge"],
+            "description": "'line' for historical trends, 'gauge' for latest value."
+          },
+          "period": {
+            "type": "string",
+            "description": "Time range (e.g., '24h', 'today') for 'line' charts."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max records for 'line' charts (default 100)."
+          }
+        },
+        "required": ["metric"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_dashboard_charts",
+      "description": "Retrieve current dashboard chart configurations.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "save_dashboard_charts",
+      "description": "Save dashboard chart configurations. Warning: Overwrites existing configuration.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "charts": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Array of chart configuration objects."
+          }
+        },
+        "required": ["charts"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_metric_ui_configs",
+      "description": "Retrieve metric-level UI configurations (display names, colors, etc.).",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "save_metric_ui_configs",
+      "description": "Save metric-level UI configurations.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "configs": {
+            "type": "object",
+            "description": "Object mapping metric keys to configuration objects."
+          }
+        },
+        "required": ["configs"]
+      }
+    }
+  }
+]
