@@ -137,28 +137,6 @@ def list_virtual_metrics() -> List[Dict[str, str]]:
     response.raise_for_status()
     return response.json()
 
-def create_or_update_virtual_metric(name: str, formula: str) -> Dict[str, str]:
-    """
-    Create a new virtual metric or update an existing one.
-    Args:
-        name: The name for the virtual metric.
-        formula: The math formula (e.g., 'pv_power / load').
-    """
-    payload = {"name": name, "formula": formula}
-    response = requests.post(f"{BASE_URL}/api/virtual_metrics", json=payload)
-    response.raise_for_status()
-    return response.json()
-
-def delete_virtual_metric(name: str) -> Dict[str, str]:
-    """
-    Delete a virtual metric by name.
-    Args:
-        name: The name of the virtual metric to delete.
-    """
-    response = requests.delete(f"{BASE_URL}/api/virtual_metrics/{name}")
-    response.raise_for_status()
-    return response.json()
-
 def get_chart_data(
     metric: str,
     chart_type: str = "line",
@@ -186,20 +164,8 @@ def get_dashboard_charts() -> List[Dict[str, Any]]:
     response.raise_for_status()
     return response.json()
 
-def save_dashboard_charts(charts: List[Dict[str, Any]]) -> Dict[str, str]:
-    """Save dashboard chart configurations."""
-    response = requests.post(f"{BASE_URL}/api/charts", json=charts)
-    response.raise_for_status()
-    return response.json()
-
 def get_metric_ui_configs() -> Dict[str, Dict[str, Any]]:
     """Retrieve metric-level UI configurations (display names, colors, etc.)."""
     response = requests.get(f"{BASE_URL}/api/metric_configs")
-    response.raise_for_status()
-    return response.json()
-
-def save_metric_ui_configs(configs: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
-    """Save metric-level UI configurations."""
-    response = requests.post(f"{BASE_URL}/api/metric_configs", json=configs)
     response.raise_for_status()
     return response.json()
