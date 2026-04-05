@@ -8,7 +8,7 @@ def get_available_metrics() -> List[str]:
     Retrieves a list of all unique data keys available in the system, including virtual metrics.
     Recommended to run this initially to identify valid metrics for other queries.
     """
-    response = requests.get(f"{BASE_URL}/api/keys")
+    response = requests.get(f"{BASE_URL}/api/keys", timeout=10)
     response.raise_for_status()
     return response.json()
 
