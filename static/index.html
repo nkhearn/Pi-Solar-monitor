@@ -653,11 +653,9 @@
             const seenCategories = new Set();
             const allKeys = Object.keys(data).filter(k => typeof data[k] !== 'object' || data[k] === null);
 
-            if (allKeys.length !== availableMetrics.length) {
+            if (allKeys.length > availableMetrics.length) {
                 availableMetrics = allKeys.filter(k => typeof data[k] === 'number');
                 updateMetricSelect();
-                // Rebuild UI if keys changed
-                Object.values(categories).forEach(el => el.innerHTML = '');
             }
 
             // Sort keys based on config order
@@ -728,7 +726,8 @@
 
                 const tsDiv = document.getElementById(`metric-ts-${key}`);
                 if (tsDiv) {
-                    const formattedTs = formatTimestamp(payload.timestamp);
+                    const metricTs = (payload.metric_timestamps && payload.metric_timestamps[key]) || payload.timestamp;
+                    const formattedTs = formatTimestamp(metricTs);
                     if (tsDiv.textContent !== formattedTs) {
                         tsDiv.textContent = formattedTs;
                     }
