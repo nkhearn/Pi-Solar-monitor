@@ -1,0 +1,162 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_available_metrics",
+      "description": "Retrieves a list of all unique data keys available in the system, including virtual metrics. Recommended to run this initially to identify valid metrics for other queries.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_latest_data",
+      "description": "Returns the most recent aggregated data point, including timestamps and values for all metrics.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_metric_last_value",
+      "description": "Returns the most recent value and timestamp for a specific metric key.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "metric_key": {
+            "type": "string",
+            "description": "The unique key of the metric to retrieve (e.g., 'pv_power', 'battery_voltage')."
+          }
+        },
+        "required": ["metric_key"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_metric_history",
+      "description": "Returns historical values for a specific metric key in a compact [timestamp, value] format. 'start' and 'end' can be ISO timestamps or relative strings (e.g., 'today', '1h', '24h').",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "metric_key": {
+            "type": "string",
+            "description": "The unique key of the metric to retrieve."
+          },
+          "start": {
+            "type": "string",
+            "description": "Optional start time. Can be an ISO timestamp or relative string like '1h', '24h', '7d', 'today'."
+          },
+          "end": {
+            "type": "string",
+            "description": "Optional end time. Can be an ISO timestamp or relative string."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max number of records to return (default 100).",
+            "default": 100
+          }
+        },
+        "required": ["metric_key"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_metric_statistics",
+      "description": "Returns aggregate statistics (avg, min, max, sum, count) for a metric key over a period.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "metric_key": {
+            "type": "string",
+            "description": "The unique key of the metric to analyze."
+          },
+          "start": {
+            "type": "string",
+            "description": "Optional start time for the analysis window."
+          },
+          "end": {
+            "type": "string",
+            "description": "Optional end time for the analysis window."
+          }
+        },
+        "required": ["metric_key"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_metric_specific_stat",
+      "description": "Returns a single specific statistic (avg, min, max, sum, or count) for a metric key.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "metric_key": {
+            "type": "string",
+            "description": "The unique key of the metric to analyze."
+          },
+          "stat_key": {
+            "type": "string",
+            "enum": ["avg", "min", "max", "sum", "count"],
+            "description": "The specific statistic to retrieve."
+          },
+          "start": {
+            "type": "string",
+            "description": "Optional start time for the analysis window."
+          },
+          "end": {
+            "type": "string",
+            "description": "Optional end time for the analysis window."
+          }
+        },
+        "required": ["metric_key", "stat_key"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_virtual_metrics",
+      "description": "Returns all defined virtual metrics and their arithmetic formulas.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_system_history",
+      "description": "Returns a list of recent aggregated data points for the entire system. Each point includes a timestamp and a data object with all available metrics.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string",
+            "description": "Optional start time."
+          },
+          "end": {
+            "type": "string",
+            "description": "Optional end time."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max number of records to return (default 100).",
+            "default": 100
+          }
+        }
+      }
+    }
+  }
+]
