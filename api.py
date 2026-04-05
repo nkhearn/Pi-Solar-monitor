@@ -49,6 +49,9 @@ manager = ConnectionManager()
 _virtual_metrics_cache = None
 _sql_expressions_cache = {}
 _compiled_formulas_cache = {}
+_latest_metrics_cache = {}
+_cache_initialized = False
+_cache_lock = asyncio.Lock()
 
 _stats_cache = {}
 STATS_CACHE_TTL = 30
@@ -81,13 +84,64 @@ async def get_virtual_metrics_map():
     _virtual_metrics_cache = {row['name']: row['formula'] for row in rows}
     return _virtual_metrics_cache
 
+async def ensure_cache_initialized():
+    global _cache_initialized
+    if not _cache_initialized:
+        async with _cache_lock:
+            if not _cache_initialized:
+                await asyncio.to_thread(_init_latest_metrics)
+                # After physical metrics are loaded, calculate virtual ones
+                v_metrics = await get_virtual_metrics_map()
+                current_values = {k: v["value"] for k, v in _latest_metrics_cache.items()}
+                for name, formula in v_metrics.items():
+                    val = evaluate_formula(formula, current_values)
+                    if val is not None:
+                        # Find the latest timestamp among components if possible
+                        ts = "1970-01-01 00:00:00"
+                        metrics_in_formula = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
+                        for m in metrics_in_formula:
+                            m_san = sanitize_column_name(m)
+                            if m_san in _latest_metrics_cache:
+                                if _latest_metrics_cache[m_san]["timestamp"] > ts:
+                                    ts = _latest_metrics_cache[m_san]["timestamp"]
+                        _latest_metrics_cache[name] = {"value": val, "timestamp": ts}
+                _cache_initialized = True
+
+def _init_latest_metrics():
+    global _latest_metrics_cache
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.execute("PRAGMA table_info(data_points)")
+        columns = [row[1] for row in cursor.fetchall() if row[1] not in ('id', 'timestamp')]
+    except sqlite3.Error:
+        columns = []
+
+    new_cache = {}
+    for col in columns:
+        try:
+            # Explicitly select the column and timestamp where column is NOT NULL
+            cursor.execute(f"SELECT {col}, timestamp FROM data_points WHERE {col} IS NOT NULL ORDER BY timestamp DESC LIMIT 1")
+            row = cursor.fetchone()
+            if row:
+                new_cache[col] = {"value": row[col], "timestamp": row["timestamp"]}
+        except sqlite3.Error:
+            pass
+
+    _latest_metrics_cache = new_cache
+
 def invalidate_vm_cache():
     global _virtual_metrics_cache
     global _sql_expressions_cache
     global _compiled_formulas_cache
+    global _cache_initialized
+    global _latest_metrics_cache
     _virtual_metrics_cache = None
     _sql_expressions_cache = {}
     _compiled_formulas_cache = {}
+    _cache_initialized = False
+    _latest_metrics_cache = {}
 
 def is_safe_formula(formula: str):
     if not re.match(r'^[a-zA-Z0-9_+*/() \-.]+$', formula):
@@ -174,20 +228,23 @@ def _get_last_from_db():
 
 @app.get("/api/last")
 async def get_last():
-    row = await asyncio.to_thread(_get_last_from_db)
-    if row:
-        data = dict(row)
-        # Remove 'id' and 'timestamp' from data part
-        timestamp = data.pop("timestamp")
-        data.pop("id")
+    await ensure_cache_initialized()
+    if not _latest_metrics_cache:
+        return {"error": "No data available"}
 
-        v_metrics = await get_virtual_metrics_map()
-        if v_metrics:
-            for name, formula in v_metrics.items():
-                data[name] = evaluate_formula(formula, data)
+    # Return a merged view. Note that for the dashboard, it wants a 'timestamp' and 'data'.
+    # Since we now have per-metric timestamps, we provide the latest overall timestamp
+    # as the primary one, but include all individual metrics.
+    latest_ts = max((m["timestamp"] for m in _latest_metrics_cache.values()), default=None)
+    data_with_timestamps = {k: v["value"] for k, v in _latest_metrics_cache.items()}
+    # We also include a special field for individual timestamps if the frontend wants them
+    metric_timestamps = {k: v["timestamp"] for k, v in _latest_metrics_cache.items()}
 
-        return {"timestamp": timestamp, "data": data}
-    return {"error": "No data available"}
+    return {
+        "timestamp": latest_ts,
+        "data": data_with_timestamps,
+        "metric_timestamps": metric_timestamps
+    }
 
 def _get_keys_from_db():
     conn = get_db_connection()
@@ -211,26 +268,14 @@ def _execute_query_one(query, params):
 
 @app.get("/api/data/{key}/last")
 async def get_data_last(key: str):
-    v_metrics = await get_virtual_metrics_map()
+    await ensure_cache_initialized()
     sanitized_key = sanitize_column_name(key)
 
-    if key in v_metrics:
-        sql_expr = formula_to_sql(v_metrics[key])
-    else:
-        sql_expr = sanitized_key
+    if key in _latest_metrics_cache:
+        return _latest_metrics_cache[key]
+    elif sanitized_key in _latest_metrics_cache:
+        return _latest_metrics_cache[sanitized_key]
 
-    query = f"SELECT timestamp, {sql_expr} as value FROM data_points WHERE {sql_expr} IS NOT NULL ORDER BY timestamp DESC LIMIT 1"
-
-    try:
-        row = await asyncio.to_thread(_execute_query_one, query, [])
-    except sqlite3.OperationalError as e:
-        # Might happen if column doesn't exist yet
-        if "no such column" in str(e):
-             return {"timestamp": None, "value": None}
-        raise HTTPException(status_code=400, detail=f"Error querying data: {e}")
-
-    if row:
-        return {"timestamp": row["timestamp"], "value": row["value"]}
     return {"timestamp": None, "value": None}
 
 def _execute_query_all(query, params):
@@ -597,15 +642,43 @@ def build_data_query(
     return query, params
 
 async def notify_new_data(data_payload):
-    v_metrics = await get_virtual_metrics_map()
-    if v_metrics:
-        data_payload = data_payload.copy()
-        data = data_payload["data"].copy()
-        for name, formula in v_metrics.items():
-            data[name] = evaluate_formula(formula, data)
-        data_payload["data"] = data
+    await ensure_cache_initialized()
 
-    message = json.dumps({"type": "new_data", "payload": data_payload})
+    new_data = data_payload["data"]
+    ts = data_payload["timestamp"]
+
+    # Update cache with new physical metrics
+    for k, v in new_data.items():
+        sanitized_k = sanitize_column_name(k)
+        _latest_metrics_cache[sanitized_k] = {"value": v, "timestamp": ts}
+
+    # Recalculate all virtual metrics using the updated cache
+    v_metrics = await get_virtual_metrics_map()
+    current_values = {k: v["value"] for k, v in _latest_metrics_cache.items()}
+    for name, formula in v_metrics.items():
+        val = evaluate_formula(formula, current_values)
+        if val is not None:
+            # For virtual metrics, use the latest timestamp of its components
+            comp_ts = "1970-01-01 00:00:00"
+            metrics_in_formula = re.findall(r'\b[a-zA-Z][a-zA-Z0-9_]*\b', formula)
+            for m in metrics_in_formula:
+                m_san = sanitize_column_name(m)
+                if m_san in _latest_metrics_cache:
+                    if _latest_metrics_cache[m_san]["timestamp"] > comp_ts:
+                        comp_ts = _latest_metrics_cache[m_san]["timestamp"]
+            _latest_metrics_cache[name] = {"value": val, "timestamp": comp_ts}
+
+    # Prepare merged payload for broadcast
+    merged_data = {k: v["value"] for k, v in _latest_metrics_cache.items()}
+    merged_timestamps = {k: v["timestamp"] for k, v in _latest_metrics_cache.items()}
+
+    broadcast_payload = {
+        "timestamp": ts,
+        "data": merged_data,
+        "metric_timestamps": merged_timestamps
+    }
+
+    message = json.dumps({"type": "new_data", "payload": broadcast_payload})
     await manager.broadcast(message)
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
