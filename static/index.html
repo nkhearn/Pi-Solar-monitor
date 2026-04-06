@@ -148,21 +148,6 @@
             position: relative;
             transition: all 0.2s;
         }
-        .card.collapsed {
-            padding: 4px 15px;
-            min-height: 2px;
-        }
-        .card.collapsed h3, .card.collapsed .value {
-            display: none;
-        }
-        .card.collapsed::after {
-            content: "";
-            display: block;
-            height: 2px;
-            width: 100%;
-            background: var(--accent-color);
-            opacity: 0.5;
-        }
         .card h3 {
             margin-top: 0;
             font-size: 0.8em;
@@ -459,7 +444,7 @@
             </div>
             <div class="form-group checkbox-group">
                 <input type="checkbox" id="cmHidden">
-                <label for="cmHidden">Hide Metric (collapse)</label>
+                <label for="cmHidden">Hide Metric</label>
             </div>
             <div class="form-group">
                 <label for="cmOrder">Order (lower = first)</label>
@@ -668,7 +653,10 @@
 
             for (const key of sortedKeys) {
                 const category = getCategory(key);
-                seenCategories.add(category);
+                const config = metricConfigs[key] || {};
+                if (!config.hidden) {
+                    seenCategories.add(category);
+                }
 
                 let card = document.getElementById(`metric-card-${key}`);
                 let valueDiv;
@@ -717,7 +705,7 @@
                 const nameSpan = titleEl.querySelector('.metric-name');
                 nameSpan.textContent = config.displayName || key.replace(/_/g, ' ');
                 card.style.borderTop = `4px solid ${config.color || 'transparent'}`;
-                card.classList.toggle('collapsed', !!config.hidden);
+                card.classList.toggle('hidden', !!config.hidden);
 
                 const displayValue = typeof data[key] === 'number' ? data[key].toFixed(2).replace(/\.00$/, '') : data[key];
                 if (valueDiv.childNodes[0].textContent !== displayValue) {
