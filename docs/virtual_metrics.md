@@ -77,8 +77,8 @@ While formulas themselves are arithmetic-only, you can perform powerful aggregat
 The system retroactively calculates these stats by converting your formula into a SQL expression.
 
 ### 📡 Available Stats Endpoints
-- `/api/data/{name}/stats`: Returns `avg`, `min`, `max`, `sum`, and `count`.
-- `/api/data/{name}/stats/{stat_key}`: Returns a single value (e.g., just the `avg`).
+- `/api/data/{key}/stats`: Returns `avg`, `min`, `max`, `sum`, and `count`.
+- `/api/data/{key}/stats/{stat_key}`: Returns a single value (e.g., just the `avg`).
 
 ### 💡 Examples
 - **Average efficiency today**:
