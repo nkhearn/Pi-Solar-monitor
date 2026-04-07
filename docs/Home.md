@@ -13,6 +13,7 @@ Explore the core sections to get started, customize your setup, or integrate wit
 | [**⚙️ Installation**](installation.md) | How to set up the hardware and software. |
 | [**🖥️ Usage**](usage.md) | Dashboard overview, themes, and customization. |
 | [**🔌 Collectors**](collectors.md) | Managing and creating data collection scripts. |
+| [**🧮 Virtual Metrics**](virtual_metrics.md) | Create calculated metrics using arithmetic formulas. |
 | [**⚡ Conditional Actions**](conditions.md) | Automate actions based on live system data. |
 | [**📡 REST API**](api.md) | Detailed documentation on data endpoints. |
 | [**🛰️ WebSockets**](websockets.md) | Real-time data streaming specifications. |
