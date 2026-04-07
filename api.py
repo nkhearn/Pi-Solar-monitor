@@ -581,15 +581,7 @@ def parse_relative_time(time_str: str) -> str:
         elif unit == 'h': delta = timedelta(hours=value)
         elif unit == 'd': delta = timedelta(days=value)
         return (now_utc - delta).strftime('%Y-%m-%d %H:%M:%S')
-
-    # Try to parse as ISO and normalize to DB format (YYYY-MM-DD HH:MM:SS)
-    try:
-        # replace('Z', '+00:00') for compatibility with older python if needed,
-        # though 3.11+ handles Z natively.
-        dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
-        return dt.strftime('%Y-%m-%d %H:%M:%S')
-    except ValueError:
-        return time_str
+    return time_str
 
 def build_data_query(
     key: str,

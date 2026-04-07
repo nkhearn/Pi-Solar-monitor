@@ -36,7 +36,7 @@ Returns a list of recent aggregated data points.
     - `start` (optional): ISO timestamp or relative time (e.g., `1h`, `today`).
     - `end` (optional): ISO timestamp or relative time.
 
-- **Example**: `/api/history?start=2024-03-20T10:00:00Z&end=2024-03-20T12:00:00Z&limit=50`
+- **Example**: `/api/history?start=2024-03-20%2010:00:00&end=2024-03-20%2012:00:00&limit=50`
 
 - **Success Response**:
   - **Code**: 200
@@ -102,7 +102,7 @@ Returns historical values for a key in a compact format suitable for charting.
     - `start`, `end` (optional): ISO timestamp or relative time (`10s`, `5m`, `1h`, `7d`, `today`).
     - `gt`, `lt`, `eq` (optional): Value filters (Greater than, Less than, Equal to).
 
-- **Example**: `/api/data/pv_power/history?start=2024-03-20T00:00:00Z&end=2024-03-20T23:59:59Z`
+- **Example**: `/api/data/pv_power/history?start=2024-03-20%2000:00:00&end=2024-03-20%2023:59:59`
 
 - **Success Response**:
   - **Code**: 200
@@ -124,7 +124,7 @@ Returns aggregate statistics for a key over a period.
     - `start`, `end` (optional): Time range.
     - `gt`, `lt`, `eq` (optional): Value filters.
 
-- **Example**: `/api/data/battery_voltage/stats?start=2024-03-19T12:00:00Z&end=2024-03-20T12:00:00Z`
+- **Example**: `/api/data/battery_voltage/stats?start=2024-03-19%2012:00:00&end=2024-03-20%2012:00:00`
 
 - **Success Response**:
   - **Code**: 200
@@ -153,7 +153,7 @@ Returns a single specific statistic for a key.
 
 - **Examples**:
     - `/api/data/battery_voltage/stats/avg?start=24h`
-    - `/api/data/pv_power/stats/sum?start=2024-03-20T06:00:00Z&end=2024-03-20T18:00:00Z`
+    - `/api/data/pv_power/stats/sum?start=2024-03-20%2006:00:00&end=2024-03-20%2018:00:00`
 
 - **Success Response**:
   - **Code**: 200
@@ -281,7 +281,7 @@ Saves the dashboard chart configuration. Overwrites existing configuration.
 ## ⏲️ Time Filtering Format
 
 The `start` and `end` parameters support:
-- **ISO Timestamps**: `2023-10-27T10:00:00Z`
+- **ISO Timestamps**: `2023-10-27 10:00:00`
 - **Relative Strings**:
     - `today`: Since midnight.
     - `[number][unit]`: Where unit is `s` (seconds), `m` (minutes), `h` (hours), or `d` (days). Example: `24h` for the last 24 hours.
