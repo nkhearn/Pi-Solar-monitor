@@ -202,7 +202,7 @@ def save_to_db(data):
     finally:
         conn.close()
 
-async def collect_now(run_hourly=False, run_daily=False, current_time=None):
+async def collect_now(current_time=None):
     """
     Performs a single collection cycle.
     """
