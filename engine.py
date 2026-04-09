@@ -247,7 +247,7 @@ async def collection_loop():
     run_hourly = (now.minute == 0)
     run_daily = (run_hourly and now.hour == 0)
 
-    await collect_now(run_hourly=run_hourly, run_daily=run_daily, current_time=now)
+    await collect_now(current_time=now)
 
     last_purge_hour = -1
     while True:
