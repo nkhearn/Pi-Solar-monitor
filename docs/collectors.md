@@ -103,12 +103,21 @@ except Exception as e:
 
 You can schedule collectors by placing them in specific subdirectories within the `collectors/` folder:
 
-| Directory | Frequency | Timeout |
-| :--- | :--- | :--- |
-| `collectors/` | Every Minute | 55s |
-| `collectors/minutely/` | Every Minute | 55s |
-| `collectors/hourly/` | Top of Every Hour | 300s |
-| `collectors/daily/` | Midnight (00:00) | 300s |
+| Directory | Frequency | Timeout | Custom Timing Example |
+| :--- | :--- | :--- | :--- |
+| `collectors/` | Every Minute | 55s | - |
+| `collectors/minutely/` | Every Minute | 55s | - |
+| `collectors/hourly/` | Every Hour | 300s | `name.35.py` (Run at MM:35) |
+| `collectors/daily/` | Every Day | 300s | `name.0935.py` (Run at 09:35) |
+
+### ⏰ Custom Scheduling
+
+For **hourly** and **daily** collectors, you can specify a custom execution time using a naming convention:
+
+- **Hourly**: Add `.MM.` to the filename (e.g., `collector.15.py`) to run it at that specific minute of every hour. Default is `00`.
+- **Daily**: Add `.HHMM.` to the filename (e.g., `collector.0930.py`) to run it at that specific time every day. Default is `0000` (midnight).
+
+If no timing pattern is found in the filename, the default (top of the hour or midnight) is used.
 
 ---
 

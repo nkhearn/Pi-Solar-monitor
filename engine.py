@@ -84,19 +84,53 @@ async def run_collector(filepath, timeout=55):
         print(f"Error running collector {filepath}: {e}")
         return None
 
-async def collect_from_dirs(directories, timeout=55):
+def should_run_collector(filename, current_time, directory_name):
+    """
+    Determines if a collector should run based on its filename and current time.
+    """
+    name_parts = filename.split('.')
+
+    if directory_name == 'hourly':
+        target_minute = 0
+        for part in name_parts[1:-1]:
+            if re.fullmatch(r'\d{2}', part):
+                target_minute = int(part)
+                break
+        return current_time.minute == target_minute
+
+    elif directory_name == 'daily':
+        target_hour = 0
+        target_minute = 0
+        for part in name_parts[1:-1]:
+            if re.fullmatch(r'\d{4}', part):
+                target_hour = int(part[:2])
+                target_minute = int(part[2:])
+                break
+        return current_time.hour == target_hour and current_time.minute == target_minute
+
+    return True
+
+async def collect_from_dirs(directories, timeout=55, current_time=None):
     """
     Iterates through specified directories and aggregates data from executables.
     """
+    if current_time is None:
+        current_time = datetime.now()
+
     aggregated_data = {}
     tasks = []
     for directory in directories:
         if not os.path.exists(directory):
             continue
+
+        # Use the name of the directory (hourly, daily, etc.) for timing checks
+        dir_name = os.path.basename(os.path.normpath(directory))
+
         for filename in sorted(os.listdir(directory)):
             filepath = os.path.join(directory, filename)
             if os.path.isfile(filepath) and os.access(filepath, os.X_OK):
-                tasks.append(run_collector(filepath, timeout))
+                if should_run_collector(filename, current_time, dir_name):
+                    tasks.append(run_collector(filepath, timeout))
 
     if tasks:
         results = await asyncio.gather(*tasks)
@@ -106,20 +140,18 @@ async def collect_from_dirs(directories, timeout=55):
 
     return aggregated_data
 
-async def collect_all(run_hourly=False, run_daily=False):
+async def collect_all(run_hourly=False, run_daily=False, current_time=None):
     """
     Aggregates data from all relevant collector directories based on the schedule.
     """
-    dirs_55s = [COLLECTORS_DIR, os.path.join(COLLECTORS_DIR, "minutely")]
-    dirs_300s = []
-    if run_hourly:
-        dirs_300s.append(os.path.join(COLLECTORS_DIR, "hourly"))
-    if run_daily:
-        dirs_300s.append(os.path.join(COLLECTORS_DIR, "daily"))
+    if current_time is None:
+        current_time = datetime.now()
 
-    tasks = [collect_from_dirs(dirs_55s, timeout=55)]
-    if dirs_300s:
-        tasks.append(collect_from_dirs(dirs_300s, timeout=300))
+    dirs_55s = [COLLECTORS_DIR, os.path.join(COLLECTORS_DIR, "minutely")]
+    dirs_300s = [os.path.join(COLLECTORS_DIR, "hourly"), os.path.join(COLLECTORS_DIR, "daily")]
+
+    tasks = [collect_from_dirs(dirs_55s, timeout=55, current_time=current_time)]
+    tasks.append(collect_from_dirs(dirs_300s, timeout=300, current_time=current_time))
 
     results = await asyncio.gather(*tasks)
 
@@ -170,13 +202,22 @@ def save_to_db(data):
     finally:
         conn.close()
 
-async def collect_now(run_hourly=False, run_daily=False):
+async def collect_now(run_hourly=False, run_daily=False, current_time=None):
     """
     Performs a single collection cycle.
     """
-    now_utc = datetime.now(timezone.utc)
-    print(f"Collecting data at {now_utc} UTC (hourly={run_hourly}, daily={run_daily})")
-    data = await collect_all(run_hourly=run_hourly, run_daily=run_daily)
+    if current_time is None:
+        now_utc = datetime.now(timezone.utc)
+        current_time = datetime.now()
+    else:
+        if current_time.tzinfo is None:
+            # Naive datetime is treated as local time, convert to UTC
+            now_utc = current_time.astimezone(timezone.utc)
+        else:
+            now_utc = current_time.astimezone(timezone.utc)
+
+    print(f"Collecting data at {now_utc} UTC")
+    data = await collect_all(current_time=current_time)
     if data:
         db_task = asyncio.to_thread(save_to_db, data.copy())
 
@@ -206,7 +247,7 @@ async def collection_loop():
     run_hourly = (now.minute == 0)
     run_daily = (run_hourly and now.hour == 0)
 
-    await collect_now(run_hourly=run_hourly, run_daily=run_daily)
+    await collect_now(run_hourly=run_hourly, run_daily=run_daily, current_time=now)
 
     last_purge_hour = -1
     while True:
@@ -224,7 +265,7 @@ async def collection_loop():
             condition_engine.engine.purge_old_cooldowns()
             last_purge_hour = now.hour
 
-        await collect_now(run_hourly=run_hourly, run_daily=run_daily)
+        await collect_now(run_hourly=run_hourly, run_daily=run_daily, current_time=now)
 
 if __name__ == "__main__":
     try:
