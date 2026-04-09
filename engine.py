@@ -265,7 +265,7 @@ async def collection_loop():
             condition_engine.engine.purge_old_cooldowns()
             last_purge_hour = now.hour
 
-        await collect_now(run_hourly=run_hourly, run_daily=run_daily, current_time=now)
+        await collect_now(current_time=now)
 
 if __name__ == "__main__":
     try:
