@@ -140,7 +140,7 @@ async def collect_from_dirs(directories, timeout=55, current_time=None):
 
     return aggregated_data
 
-async def collect_all(run_hourly=False, run_daily=False, current_time=None):
+async def collect_all(current_time=None):
     """
     Aggregates data from all relevant collector directories based on the schedule.
     """
