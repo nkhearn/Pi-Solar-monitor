@@ -5,6 +5,7 @@ import sqlite3
 import time
 import asyncio
 import re
+import logging
 from datetime import datetime, timezone
 try:
     import api  # Import our api module to notify websockets
@@ -17,6 +18,8 @@ DB_PATH = "data/inverter_logs.db"
 COLLECTORS_DIR = "collectors"
 # MACRODROID_URL = "https://trigger.macrodroid.com/UUID/power"
 MACRODROID_URL = os.getenv("MACRODROID_URL")
+
+logger = logging.getLogger(__name__)
 
 def sanitize_column_name(name):
     """
@@ -43,17 +46,21 @@ async def send_to_macrodroid(payload_dict):
 
         response = await asyncio.to_thread(do_post)
         if response.status_code == 200:
-            print("Macrodroid Triggered Successfully")
+            logger.debug("Macrodroid Triggered Successfully")
         else:
-            print(f"Macrodroid Error: {response.status_code} - {response.text}")
+            logger.error(f"Macrodroid Error: {response.status_code} - {response.text}")
     except Exception as e:
-        print(f"Macrodroid Connection Error: {e}")
+        logger.error(f"Macrodroid Connection Error: {e}")
 
-async def run_collector(filepath, timeout=55):
+async def run_collector(filepath, timeout=55, directory_name=None):
     """
     Runs an executable and returns its JSON output with a specified timeout.
     """
     try:
+        if not os.access(filepath, os.X_OK):
+            logger.warning(f"Collector {filepath} is not executable.")
+            return None
+
         proc = await asyncio.create_subprocess_exec(
             filepath,
             stdout=asyncio.subprocess.PIPE,
@@ -62,31 +69,45 @@ async def run_collector(filepath, timeout=55):
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             if proc.returncode == 0:
+                raw_output = stdout.decode().strip()
                 try:
-                    return json.loads(stdout.decode())
+                    data = json.loads(raw_output)
+
+                    # Logging requirements:
+                    # - Log data for hourly and daily collectors at STANDARD (INFO) level.
+                    # - Log data for all collectors at DEBUG level.
+                    is_minutely = directory_name in [None, 'minutely', 'collectors']
+
+                    if not is_minutely:
+                        logger.info(f"Collector {filepath} output: {raw_output}")
+                    else:
+                        logger.debug(f"Collector {filepath} output: {raw_output}")
+
+                    return data
                 except json.JSONDecodeError:
-                    print(f"Error: Collector {filepath} returned invalid JSON.")
+                    logger.error(f"Error: Collector {filepath} returned invalid JSON: {raw_output}")
                     return None
             else:
-                print(f"Error: Collector {filepath} exited with code {proc.returncode}")
+                logger.error(f"Error: Collector {filepath} exited with code {proc.returncode}")
                 if stderr:
-                    print(f"Stderr: {stderr.decode().strip()}")
+                    logger.error(f"Stderr: {stderr.decode().strip()}")
                 return None
         except asyncio.TimeoutError:
-            print(f"Error: Collector {filepath} timed out after {timeout} seconds. Killing process.")
+            logger.error(f"Error: Collector {filepath} timed out after {timeout} seconds. Killing process.")
             try:
                 proc.kill()
                 await proc.wait()
             except Exception as e:
-                print(f"Failed to kill process {filepath}: {e}")
+                logger.error(f"Failed to kill process {filepath}: {e}")
             return None
     except Exception as e:
-        print(f"Error running collector {filepath}: {e}")
+        logger.error(f"Error running collector {filepath}: {e}")
         return None
 
 def should_run_collector(filename, current_time, directory_name):
     """
     Determines if a collector should run based on its filename and current time.
+    Returns (bool, reason)
     """
     name_parts = filename.split('.')
 
@@ -96,7 +117,9 @@ def should_run_collector(filename, current_time, directory_name):
             if re.fullmatch(r'\d{2}', part):
                 target_minute = int(part)
                 break
-        return current_time.minute == target_minute
+        if current_time.minute == target_minute:
+            return True, None
+        return False, f"Not scheduled: current minute {current_time.minute} != target {target_minute}"
 
     elif directory_name == 'daily':
         target_hour = 0
@@ -106,9 +129,11 @@ def should_run_collector(filename, current_time, directory_name):
                 target_hour = int(part[:2])
                 target_minute = int(part[2:])
                 break
-        return current_time.hour == target_hour and current_time.minute == target_minute
+        if current_time.hour == target_hour and current_time.minute == target_minute:
+            return True, None
+        return False, f"Not scheduled: current time {current_time.hour:02d}:{current_time.minute:02d} != target {target_hour:02d}:{target_minute:02d}"
 
-    return True
+    return True, None
 
 async def collect_from_dirs(directories, timeout=55, current_time=None):
     """
@@ -121,6 +146,7 @@ async def collect_from_dirs(directories, timeout=55, current_time=None):
     tasks = []
     for directory in directories:
         if not os.path.exists(directory):
+            logger.debug(f"Directory {directory} does not exist.")
             continue
 
         # Use the name of the directory (hourly, daily, etc.) for timing checks
@@ -128,9 +154,16 @@ async def collect_from_dirs(directories, timeout=55, current_time=None):
 
         for filename in sorted(os.listdir(directory)):
             filepath = os.path.join(directory, filename)
-            if os.path.isfile(filepath) and os.access(filepath, os.X_OK):
-                if should_run_collector(filename, current_time, dir_name):
-                    tasks.append(run_collector(filepath, timeout))
+            if os.path.isfile(filepath):
+                should_run, reason = should_run_collector(filename, current_time, dir_name)
+                if should_run:
+                    if os.access(filepath, os.X_OK):
+                        logger.info(f"Running collector: {filepath}")
+                        tasks.append(run_collector(filepath, timeout, directory_name=dir_name))
+                    else:
+                        logger.error(f"Collector skipped: {filepath} (Reason: Not executable)")
+                else:
+                    logger.debug(f"Collector skipped: {filepath} (Reason: {reason})")
 
     if tasks:
         results = await asyncio.gather(*tasks)
@@ -182,12 +215,12 @@ def save_to_db(data):
     # Add missing columns
     for col in sanitized_data.keys():
         if col not in existing_columns:
-            print(f"Adding new column: {col}")
+            logger.info(f"Adding new column: {col}")
             try:
                 cursor.execute(f"ALTER TABLE data_points ADD COLUMN {col} REAL")
                 existing_columns.append(col)
             except sqlite3.Error as e:
-                print(f"Failed to add column {col}: {e}")
+                logger.error(f"Failed to add column {col}: {e}")
 
     # Build INSERT query
     columns = list(sanitized_data.keys())
@@ -198,7 +231,7 @@ def save_to_db(data):
         cursor.execute(query, list(sanitized_data.values()))
         conn.commit()
     except sqlite3.Error as e:
-        print(f"Error inserting data: {e}")
+        logger.error(f"Error inserting data: {e}")
     finally:
         conn.close()
 
@@ -216,7 +249,7 @@ async def collect_now(current_time=None):
         else:
             now_utc = current_time.astimezone(timezone.utc)
 
-    print(f"Collecting data at {now_utc} UTC")
+    logger.debug(f"Collecting data at {now_utc} UTC")
     data = await collect_all(current_time=current_time)
     if data:
         db_task = asyncio.to_thread(save_to_db, data.copy())
@@ -228,20 +261,20 @@ async def collect_now(current_time=None):
                 "data": data.copy()
             }))
         else:
-            print("Skipping websocket notification (api not available)")
+            logger.warning("Skipping websocket notification (api not available)")
 
         notify_tasks.append(send_to_macrodroid(data))
         await asyncio.gather(db_task, *notify_tasks)
         await condition_engine.engine.process_conditions(current_data=data)
-        print(f"Data saved and broadcasted: {len(data)} keys")
+        logger.debug(f"Data saved and broadcasted: {len(data)} keys")
     else:
-        print("No data collected.")
+        logger.debug("No data collected.")
 
 async def collection_loop():
     """
     Main loop that runs every minute and schedules hourly/daily tasks.
     """
-    print("Starting data collection engine...")
+    logger.info("Starting data collection engine...")
 
     now = datetime.now()
     run_hourly = (now.minute == 0)
@@ -271,4 +304,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(collection_loop())
     except KeyboardInterrupt:
-        print("Collection engine stopped.")
+        logger.info("Collection engine stopped.")

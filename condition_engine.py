@@ -4,8 +4,10 @@ import json
 import time
 import asyncio
 import api
+import logging
 
 COOLDOWN_FILE = "/tmp/pi_solar_cooldowns.json"
+logger = logging.getLogger(__name__)
 
 def parse_duration(duration_str):
     if not duration_str:
@@ -46,7 +48,7 @@ class ConditionEngine:
             with open(COOLDOWN_FILE, 'w') as f:
                 json.dump(self.cooldowns, f)
         except Exception as e:
-            print(f"Error saving cooldowns: {e}")
+            logger.error(f"Error saving cooldowns: {e}")
 
     def purge_old_cooldowns(self):
         now = time.time()
@@ -54,7 +56,7 @@ class ConditionEngine:
         before_count = len(self.cooldowns)
         self.cooldowns = {k: v for k, v in self.cooldowns.items() if now - v < 48 * 3600}
         if len(self.cooldowns) != before_count:
-            print(f"Purged {before_count - len(self.cooldowns)} old cooldown entries.")
+            logger.info(f"Purged {before_count - len(self.cooldowns)} old cooldown entries.")
             self.save_cooldowns()
 
     async def evaluate_path(self, path, current_data=None):
@@ -101,7 +103,7 @@ class ConditionEngine:
                 )
                 return res.get(stat_key)
         except Exception as e:
-            print(f"Error evaluating path {path}: {e}")
+            logger.error(f"Error evaluating path {path}: {e}")
         return None
 
     async def process_expression(self, expr, current_data=None):
@@ -236,6 +238,7 @@ class ConditionEngine:
                             }
 
                         if not config['action']:
+                            logger.debug(f"Condition file {filename} has no action. Skipping.")
                             continue
 
                         now = time.time()
@@ -243,8 +246,10 @@ class ConditionEngine:
                         cooldown_sec = parse_duration(config['cooldown'])
 
                         if now - last_exec < cooldown_sec:
+                            logger.debug(f"Condition file {filename} is on cooldown. Remaining: {cooldown_sec - (now - last_exec):.1f}s")
                             continue
 
+                        met_or_conditions = []
                         or_passed = True
                         if config['or']:
                             or_passed = False
@@ -252,36 +257,51 @@ class ConditionEngine:
                                 try:
                                     if await self.process_expression(expr, current_data=current_data):
                                         or_passed = True
+                                        met_or_conditions.append(expr)
+                                        # You asked to log only the first expression that evaluated to true for OR
                                         break
                                 except Exception as e:
-                                    # print(f"OR Condition error in {filename}: {e}")
+                                    logger.debug(f"OR Condition {expr} error in {filename}: {e}")
                                     pass
+                            if not or_passed:
+                                logger.debug(f"Condition file {filename} failed: No OR conditions met.")
 
+                        met_and_conditions = []
                         and_passed = True
-                        if config['and']:
+                        if or_passed and config['and']:
                             for expr in config['and']:
                                 try:
                                     if not await self.process_expression(expr, current_data=current_data):
                                         and_passed = False
+                                        logger.debug(f"Condition file {filename} failed: AND condition not met: {expr}")
                                         break
+                                    else:
+                                        met_and_conditions.append(expr)
                                 except Exception as e:
-                                    # print(f"AND Condition error in {filename}: {e}")
+                                    logger.debug(f"AND Condition {expr} error in {filename}: {e}")
                                     and_passed = False
                                     break
 
                         if or_passed and and_passed:
-                            print(f"Condition MET for {filename}: {config['action']}")
+                            met_info = []
+                            if met_or_conditions:
+                                met_info.append(f"OR: {met_or_conditions[0]}")
+                            if met_and_conditions:
+                                met_info.append(f"AND: {', '.join(met_and_conditions)}")
+
+                            logger.info(f"Condition MET for {filename}: {config['action']} | Met conditions: {'; '.join(met_info)}")
+
                             # Execute action asynchronously
                             try:
                                 await asyncio.create_subprocess_shell(config['action'])
                             except Exception as e:
-                                print(f"Failed to execute action for {filename}: {e}")
+                                logger.error(f"Failed to execute action for {filename}: {e}")
 
                             self.cooldowns[filename] = now
                             self.save_cooldowns()
 
                     except Exception as e:
-                        print(f"Error processing condition file {filename}: {e}")
+                        logger.error(f"Error processing condition file {filename}: {e}")
         finally:
             del self._current_eval_cache
 
