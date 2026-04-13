@@ -99,3 +99,38 @@ Use the `/api/chart/data` endpoint to retrieve data for any metric by specifying
 - **Solar Power (24h Trend)**: `GET /api/chart/data?type=line&metric=solar_power&period=24h`
 
 For full details, see the [REST API Documentation](api.md#external-charts-api).
+
+---
+
+## 📝 Logging System
+
+The system includes an optional logging system for monitoring collection and automation activities. Logs are stored in `/var/log/pi-solar.log`.
+
+### ⚙️ Enabling Logging
+
+Logging can be enabled via the command line when starting the system:
+
+```bash
+# Run with standard logging (INFO level)
+python3 main.py --log-level STANDARD
+
+# Run with detailed debug logging
+python3 main.py --log-level DEBUG
+```
+
+Alternatively, you can set the default `log_level` variable at the top of `main.py`.
+
+### 🔍 Log Levels
+
+| Level | Description |
+| :--- | :--- |
+| `OFF` | (Default) No logging to file. |
+| `STANDARD` | Logs collector execution/skips, condition triggers (with details), and raw data for **hourly/daily** collectors. |
+| `DEBUG` | Most verbose. Includes everything in STANDARD plus raw data for **minutely** collectors and detailed reasons for skipped conditions. |
+
+### 📋 Log Format
+The logs follow a standard format:
+`YYYY-MM-DD HH:MM:SS - LEVEL - MODULE - MESSAGE`
+
+Example:
+`2023-10-27 10:00:00,123 - INFO - engine - Running collector: collectors/hourly/solar_predict.py`
