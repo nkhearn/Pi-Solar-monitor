@@ -73,12 +73,8 @@ async def run_collector(filepath, timeout=55, directory_name=None):
                 try:
                     data = json.loads(raw_output)
 
-                    # Check for "error" in keys or values (case-insensitive)
-                    has_error = False
-                    for k, v in data.items():
-                        if "error" in str(k).lower() or "error" in str(v).lower():
-                            has_error = True
-                            break
+                    # Check for "error" in the output (case-insensitive)
+                    has_error = "error" in raw_output.lower()
 
                     if has_error:
                         logger.error(f"Collector {filepath} error detected in output: {raw_output}")
