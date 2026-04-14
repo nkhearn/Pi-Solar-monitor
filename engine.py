@@ -73,15 +73,22 @@ async def run_collector(filepath, timeout=55, directory_name=None):
                 try:
                     data = json.loads(raw_output)
 
+                    # Check for "error" in the output (case-insensitive)
+                    has_error = "error" in raw_output.lower()
+
+                    if has_error:
+                        logger.error(f"Collector {filepath} error detected in output: {raw_output}")
+
                     # Logging requirements:
                     # - Log data for hourly and daily collectors at STANDARD (INFO) level.
                     # - Log data for all collectors at DEBUG level.
                     is_minutely = directory_name in [None, 'minutely', 'collectors']
 
-                    if not is_minutely:
-                        logger.info(f"Collector {filepath} output: {raw_output}")
-                    else:
-                        logger.debug(f"Collector {filepath} output: {raw_output}")
+                    if not has_error:
+                        if not is_minutely:
+                            logger.info(f"Collector {filepath} output: {raw_output}")
+                        else:
+                            logger.debug(f"Collector {filepath} output: {raw_output}")
 
                     return data
                 except json.JSONDecodeError:

@@ -20,6 +20,8 @@ def setup_logging(level_name):
         level = logging.DEBUG
     elif level_name.upper() == "STANDARD":
         level = logging.INFO
+    elif level_name.upper() == "ERROR":
+        level = logging.ERROR
     else:
         # If an invalid level is provided, we'll default to INFO if it wasn't OFF
         level = logging.INFO
@@ -61,7 +63,7 @@ async def main(log_level_arg):
     uvicorn_log_level = "info"
     if effective_log_level.upper() == "DEBUG":
         uvicorn_log_level = "debug"
-    elif effective_log_level.upper() == "OFF":
+    elif effective_log_level.upper() == "OFF" or effective_log_level.upper() == "ERROR":
         uvicorn_log_level = "error"
 
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level=uvicorn_log_level)
@@ -78,7 +80,7 @@ async def main(log_level_arg):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pi Solar Monitor")
-    parser.add_argument("--log-level", type=str, help="Set log level (OFF, STANDARD, DEBUG)", default=None)
+    parser.add_argument("--log-level", type=str, help="Set log level (OFF, STANDARD, ERROR, DEBUG)", default=None)
     args = parser.parse_args()
 
     try:
