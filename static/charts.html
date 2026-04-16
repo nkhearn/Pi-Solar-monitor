@@ -264,8 +264,9 @@
             loadingOverlay.style.display = 'flex';
             try {
                 const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const data = await response.json();
-                return data.reverse(); // data comes in DESC order
+                return Array.isArray(data) ? data.reverse() : [];
             } catch (e) {
                 console.error("Fetch error:", e);
                 return [];
