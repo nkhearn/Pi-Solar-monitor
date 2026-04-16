@@ -253,9 +253,8 @@
             const toBackendTs = (val) => {
                 if (!val) return null;
                 const d = new Date(val);
-                // Adjust to UTC manually for the string format expected by SQLite
-                const pad = (n) => n.toString().padStart(2, '0');
-                return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+                if (isNaN(d.getTime())) return null;
+                return d.toISOString().replace('T', ' ').substring(0, 19);
             };
 
             let url = `/api/data/${metric}/history?limit=5000`;
