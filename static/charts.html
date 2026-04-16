@@ -365,7 +365,9 @@
                 const res = await fetch('/api/keys');
                 const keys = await res.json();
                 if (keys.length === 0) {
-                     // Show something if no keys
+                    const opt = document.createElement('option');
+                    opt.textContent = "No metrics available";
+                    metricSelect.appendChild(opt);
                 }
                 keys.sort().forEach(k => {
                     const opt = document.createElement('option');
