@@ -92,6 +92,10 @@
             box-sizing: border-box;
         }
 
+        select[multiple] {
+            height: 100px;
+        }
+
         .chart-card {
             background: var(--container-bg);
             padding: 20px;
@@ -154,8 +158,8 @@
         <div class="controls-card">
             <div class="controls-grid">
                 <div class="form-group">
-                    <label for="metricSelect">Metric</label>
-                    <select id="metricSelect"></select>
+                    <label for="metricSelect">Metrics (Ctrl+Click)</label>
+                    <select id="metricSelect" multiple></select>
                 </div>
                 <div class="form-group">
                     <label for="typeSelect">Chart Type</label>
@@ -217,6 +221,11 @@
             if (!chartInstance) return;
             const color = getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim();
             chartInstance.options.scales.y.ticks.color = color;
+            if (chartInstance.options.scales.y.title) chartInstance.options.scales.y.title.color = color;
+            if (chartInstance.options.scales.y1) {
+                chartInstance.options.scales.y1.ticks.color = color;
+                if (chartInstance.options.scales.y1.title) chartInstance.options.scales.y1.title.color = color;
+            }
             chartInstance.options.scales.x.ticks.color = color;
             if (chartInstance.options.plugins.legend) {
                 chartInstance.options.plugins.legend.labels.color = color;
@@ -224,10 +233,15 @@
             chartInstance.update();
         }
 
+        function getSelectedMetrics() {
+            return Array.from(metricSelect.selectedOptions).map(opt => opt.value);
+        }
+
         // URL Persistence
         function updateUrl() {
             const params = new URLSearchParams();
-            if (metricSelect.value) params.set('metric', metricSelect.value);
+            const selected = getSelectedMetrics();
+            if (selected.length > 0) params.set('metric', selected.join(','));
             params.set('type', typeSelect.value);
             if (startInput.value) params.set('start', startInput.value);
             if (endInput.value) params.set('end', endInput.value);
@@ -236,15 +250,20 @@
 
         function loadFromUrl() {
             const params = new URLSearchParams(window.location.search);
-            if (params.has('metric')) metricSelect.value = params.get('metric');
+            if (params.has('metric')) {
+                const metrics = params.get('metric').split(',');
+                Array.from(metricSelect.options).forEach(opt => {
+                    opt.selected = metrics.includes(opt.value);
+                });
+            }
             if (params.has('type')) typeSelect.value = params.get('type');
             if (params.has('start')) startInput.value = params.get('start');
             if (params.has('end')) endInput.value = params.get('end');
         }
 
         async function fetchHistory() {
-            const metric = metricSelect.value;
-            if (!metric) return null;
+            const metrics = getSelectedMetrics();
+            if (metrics.length === 0) return null;
 
             let start = startInput.value;
             let end = endInput.value;
@@ -257,92 +276,140 @@
                 return d.toISOString().replace('T', ' ').substring(0, 19);
             };
 
-            let url = `/api/data/${metric}/history?limit=5000`;
-            if (start) url += `&start=${encodeURIComponent(toBackendTs(start))}`;
-            if (end) url += `&end=${encodeURIComponent(toBackendTs(end))}`;
+            const startTs = toBackendTs(start);
+            const endTs = toBackendTs(end);
 
             loadingOverlay.style.display = 'flex';
             try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                const data = await response.json();
-                return Array.isArray(data) ? data.reverse() : [];
+                const results = {};
+                await Promise.all(metrics.map(async (metric) => {
+                    let url = `/api/data/${metric}/history?limit=5000`;
+                    if (startTs) url += `&start=${encodeURIComponent(startTs)}`;
+                    if (endTs) url += `&end=${encodeURIComponent(endTs)}`;
+
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        const data = await response.json();
+                        results[metric] = Array.isArray(data) ? data.reverse() : [];
+                    }
+                }));
+                return results;
             } catch (e) {
                 console.error("Fetch error:", e);
-                return [];
+                return null;
             } finally {
                 loadingOverlay.style.display = 'none';
             }
         }
 
-        function renderChart(history) {
+        function renderChart(results) {
             const ctx = document.getElementById('mainChart').getContext('2d');
             const type = typeSelect.value;
+            const metrics = Object.keys(results);
+            if (metrics.length === 0) return;
 
-            const labels = history.map(d => {
-                // Backend is UTC, so add Z to treat it as such when parsing
-                const dt = new Date(d[0].replace(' ', 'T') + 'Z');
-                return dt.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-            });
-            const values = history.map(d => d[1]);
+            // Simple approach: Use labels from the first metric that has data
+            // In this system, timestamps usually align as they are recorded together
+            let labels = [];
+            for (const m of metrics) {
+                if (results[m].length > 0) {
+                    labels = results[m].map(d => {
+                        const dt = new Date(d[0].replace(' ', 'T') + 'Z');
+                        return dt.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    });
+                    break;
+                }
+            }
 
             if (chartInstance) chartInstance.destroy();
 
             const chartType = type === 'bar' ? 'bar' : 'line';
             const isArea = type === 'area';
-
             const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim();
+            const colors = ['#3498db', '#e67e22', '#2ecc71', '#e74c3c', '#9b59b6'];
+
+            const datasets = metrics.map((metric, index) => {
+                const color = colors[index % colors.length];
+                return {
+                    label: metric,
+                    data: results[metric].map(d => d[1]),
+                    borderColor: color,
+                    backgroundColor: isArea ? color + '33' : color,
+                    fill: isArea,
+                    tension: 0.2,
+                    pointRadius: results[metric].length > 100 ? 0 : 3,
+                    pointHoverRadius: 5,
+                    yAxisID: index === 0 ? 'y' : 'y1'
+                };
+            });
+
+            const options = {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        beginAtZero: false,
+                        ticks: { color: textColor },
+                        title: {
+                            display: true,
+                            text: metrics[0],
+                            color: textColor
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            color: textColor,
+                            maxRotation: 45,
+                            minRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 10
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: textColor } },
+                    tooltip: { enabled: true }
+                }
+            };
+
+            if (metrics.length > 1) {
+                options.scales.y1 = {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    beginAtZero: false,
+                    ticks: { color: textColor },
+                    grid: { drawOnChartArea: false },
+                    title: {
+                        display: true,
+                        text: metrics.slice(1).join(', '),
+                        color: textColor
+                    }
+                };
+            }
 
             chartInstance = new Chart(ctx, {
                 type: chartType,
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: metricSelect.value,
-                        data: values,
-                        borderColor: '#3498db',
-                        backgroundColor: isArea ? 'rgba(52, 152, 219, 0.2)' : '#3498db',
-                        fill: isArea,
-                        tension: 0.2,
-                        pointRadius: history.length > 100 ? 0 : 3,
-                        pointHoverRadius: 5
-                    }]
+                    datasets: datasets
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: false,
-                            ticks: { color: textColor }
-                        },
-                        x: {
-                            ticks: {
-                                color: textColor,
-                                maxRotation: 45,
-                                minRotation: 0,
-                                autoSkip: true,
-                                maxTicksLimit: 10
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: { labels: { color: textColor } },
-                        tooltip: { enabled: true }
-                    }
-                }
+                options: options
             });
         }
 
         async function updateChart() {
             updateUrl();
-            const history = await fetchHistory();
-            if (history) {
-                renderChart(history);
+            const results = await fetchHistory();
+            if (results) {
+                renderChart(results);
             }
         }
 
