@@ -19,6 +19,18 @@ The dashboard automatically categorizes and displays metrics collected by the sy
 
 ---
 
+## 📉 Charts Explorer
+
+For advanced analysis beyond the main dashboard, the **Charts Explorer** provides a dedicated interface for deep-diving into historical data.
+
+- **Multi-Metric Comparison**: View multiple metrics on a single chart with dual Y-axes.
+- **Custom Timeframes**: Precisely define the start and end times for data retrieval.
+- **Versatile Visuals**: Switch between Line, Bar, and Area chart types.
+
+Access it via the 📈 icon in the dashboard header. For more details, see the [Charts Explorer Documentation](charts_explorer.md).
+
+---
+
 ## ✨ Dashboard Customization
 
 ### 🎨 Themes

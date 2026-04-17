@@ -28,6 +28,7 @@ The system periodically polls various data sources via custom "collectors", stor
 - 🔌 **Modular Collection**: Run any executable script or binary (Python, Bash, etc.) to collect data.
 - 🗄️ **Efficient Storage**: High-performance local SQLite data retention with zero external dependencies.
 - 📊 **Real-time Dashboard**: Built-in web interface with live updates via WebSockets and historical visualization using Chart.js.
+- 📉 **Charts Explorer**: Dedicated page for advanced historical data analysis with multi-metric support and custom time ranges.
 - 🧮 **Advanced Virtual Metrics**: Define calculated values using arithmetic formulas with secure and efficient server-side evaluation.
 - ⚡ **Conditional Actions**: Define logic in `.cond` files to automate responses to system events.
 - 📊 **External Charts API**: Unified endpoint for quick data retrieval by chart type (line/gauge), metric, and time period.
