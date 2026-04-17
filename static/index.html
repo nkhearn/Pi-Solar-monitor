@@ -361,9 +361,9 @@
             <h1>Solar Monitor</h1>
             <div class="controls">
                 <button id="chartsBtn" class="btn" title="Charts Explorer" onclick="window.location.href='/charts.html'">📈</button>
-                <button id="customizeBtn" class="btn">⚙️ Customize</button>
-                <button id="manageVMBtn" class="btn">🧮 Virtual Metrics</button>
-                <button id="themeToggle" class="btn" aria-label="Toggle dark mode">🌙 Dark Mode</button>
+                <button id="customizeBtn" class="btn" title="Customize">⚙️</button>
+                <button id="manageVMBtn" class="btn" title="Virtual Metrics">🧮</button>
+                <button id="themeToggle" class="btn" aria-label="Toggle dark mode">🌙</button>
                 <div id="status" class="status disconnected" aria-live="polite">Connecting...</div>
             </div>
         </header>
@@ -580,7 +580,7 @@
         function setTheme(theme) {
             document.documentElement.setAttribute('data-theme', theme);
             localStorage.setItem('theme', theme);
-            themeToggle.textContent = theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+            themeToggle.textContent = theme === 'dark' ? '☀️' : '🌙';
             updateChartTheme();
         }
 
