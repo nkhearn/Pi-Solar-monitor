@@ -4,3 +4,4 @@ __pycache__/
 data/inverter_logs.db*
 output.log
 server.log
+certs/

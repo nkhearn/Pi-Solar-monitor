@@ -6,6 +6,7 @@ import sys
 import os
 from api import app
 from engine import collection_loop
+from generate_certs import generate_certificates
 
 # Default log level - can be set here or via --log-level command line argument
 log_level = "OFF"
@@ -56,6 +57,9 @@ async def main(log_level_arg):
 
     setup_logging(effective_log_level)
 
+    # Ensure certificates are generated
+    generate_certificates()
+
     # Start the collection loop as a background task
     collection_task = asyncio.create_task(collection_loop())
 
@@ -66,10 +70,26 @@ async def main(log_level_arg):
     elif effective_log_level.upper() == "OFF" or effective_log_level.upper() == "ERROR":
         uvicorn_log_level = "error"
 
-    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level=uvicorn_log_level)
-    server = uvicorn.Server(config)
+    # HTTP Config
+    http_config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level=uvicorn_log_level)
+    http_server = uvicorn.Server(http_config)
 
-    await server.serve()
+    # HTTPS Config
+    https_config = uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=8443,
+        log_level=uvicorn_log_level,
+        ssl_keyfile="certs/server.key",
+        ssl_certfile="certs/server.crt"
+    )
+    https_server = uvicorn.Server(https_config)
+
+    # Run both servers
+    await asyncio.gather(
+        http_server.serve(),
+        https_server.serve()
+    )
 
     # Cancel the collection task when the server stops
     collection_task.cancel()
