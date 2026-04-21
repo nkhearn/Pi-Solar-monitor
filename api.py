@@ -509,7 +509,7 @@ async def delete_virtual_metric(name: str):
 
 @app.get("/api/ca.crt")
 async def get_ca_cert():
-    ca_path = "certs/ca.crt"
+    ca_path = CA_CRT
     if not os.path.exists(ca_path):
         raise HTTPException(status_code=404, detail="CA certificate not found")
     return FileResponse(ca_path, media_type="application/x-x509-ca-cert", filename="ca.crt")
