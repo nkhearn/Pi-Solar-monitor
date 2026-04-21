@@ -80,8 +80,8 @@ async def main(log_level_arg):
         host="0.0.0.0",
         port=8443,
         log_level=uvicorn_log_level,
-        ssl_keyfile="certs/server.key",
-        ssl_certfile="certs/server.crt"
+        ssl_keyfile=SERVER_KEY,
+        ssl_certfile=SERVER_CRT
     )
     https_server = uvicorn.Server(https_config)
 
