@@ -2,10 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Solar Monitor</title>
-    <link rel="icon" type="image/svg+xml" href="/icon.svg">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#3498db">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -472,11 +470,8 @@
 
             <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-color); border-radius: 8px; border: 1px solid var(--border-color);">
                 <div style="font-weight: bold; margin-bottom: 8px;">Security & HTTPS</div>
-                <p style="font-size: 0.85em; margin-bottom: 10px; opacity: 0.8;">The PWA requires a secure HTTPS connection. Download our CA certificate, install it as a "Trusted Root CA" on your device, and then access the dashboard via port 8443.</p>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                    <a href="/api/ca.crt" class="btn btn-primary btn-small" download>📥 Download CA Certificate</a>
-<button class="btn btn-small" onclick="window.location.href = 'https://' + window.location.hostname + ':8443' + window.location.pathname + window.location.search + window.location.hash;">🔒 Switch to HTTPS</button>
-                </div>
+                <p style="font-size: 0.85em; margin-bottom: 10px; opacity: 0.8;">To use the PWA and other secure features, we recommend using HTTPS (Port 8443). Download and install our CA certificate to trust this connection.</p>
+                <a href="/api/ca.crt" class="btn btn-primary btn-small" download>📥 Download CA Certificate</a>
             </div>
 
             <div class="modal-header" style="font-size: 1em; margin-bottom: 10px;">Dashboard Metrics</div>
