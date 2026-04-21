@@ -7,6 +7,7 @@ import os
 from typing import List, Optional, Any, Dict, Annotated
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Body
 from fastapi.responses import FileResponse
+from generate_certs import CA_CRT
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta, timezone
