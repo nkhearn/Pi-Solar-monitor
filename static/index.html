@@ -475,7 +475,7 @@
                 <p style="font-size: 0.85em; margin-bottom: 10px; opacity: 0.8;">The PWA requires a secure HTTPS connection. Download our CA certificate, install it as a "Trusted Root CA" on your device, and then access the dashboard via port 8443.</p>
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                     <a href="/api/ca.crt" class="btn btn-primary btn-small" download>📥 Download CA Certificate</a>
-                    <button class="btn btn-small" onclick="window.location.protocol = 'https:'; window.location.port = '8443';">🔒 Switch to HTTPS</button>
+<button class="btn btn-small" onclick="window.location.href = 'https://' + window.location.hostname + ':8443' + window.location.pathname + window.location.search + window.location.hash;">🔒 Switch to HTTPS</button>
                 </div>
             </div>
 
