@@ -6,7 +6,7 @@ import sys
 import os
 from api import app
 from engine import collection_loop
-from generate_certs import generate_certificates
+from generate_certs import generate_certificates, SERVER_KEY, SERVER_CRT
 
 # Default log level - can be set here or via --log-level command line argument
 log_level = "OFF"
