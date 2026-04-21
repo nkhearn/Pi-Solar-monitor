@@ -3,8 +3,11 @@ import json
 import asyncio
 import threading
 import time
+import os
 from typing import List, Optional, Any, Dict, Annotated
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Body
+from fastapi.responses import FileResponse
+from generate_certs import CA_CRT
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta, timezone
@@ -503,6 +506,13 @@ async def delete_virtual_metric(name: str):
     await asyncio.to_thread(_delete_virtual_metric, name)
     invalidate_vm_cache()
     return {"status": "success"}
+
+@app.get("/api/ca.crt")
+async def get_ca_cert():
+    ca_path = CA_CRT
+    if not os.path.exists(ca_path):
+        raise HTTPException(status_code=404, detail="CA certificate not found")
+    return FileResponse(ca_path, media_type="application/x-x509-ca-cert", filename="ca.crt")
 
 def _get_charts_from_db():
     conn = get_db_connection()

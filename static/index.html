@@ -466,7 +466,15 @@
     <!-- Customize Dashboard Modal -->
     <div id="customizeDashboardModal" class="modal hidden" role="dialog" aria-labelledby="cdModalTitle">
         <div class="modal-content" style="width: 600px; max-height: 85vh; display: flex; flex-direction: column;">
-            <div id="cdModalTitle" class="modal-header">Customize Dashboard Metrics</div>
+            <div id="cdModalTitle" class="modal-header">Settings & Customization</div>
+
+            <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-color); border-radius: 8px; border: 1px solid var(--border-color);">
+                <div style="font-weight: bold; margin-bottom: 8px;">Security & HTTPS</div>
+                <p style="font-size: 0.85em; margin-bottom: 10px; opacity: 0.8;">To use the PWA and other secure features, we recommend using HTTPS (Port 8443). Download and install our CA certificate to trust this connection.</p>
+                <a href="/api/ca.crt" class="btn btn-primary btn-small" download>📥 Download CA Certificate</a>
+            </div>
+
+            <div class="modal-header" style="font-size: 1em; margin-bottom: 10px;">Dashboard Metrics</div>
             <div id="metric-configs-list" style="flex-grow: 1; overflow-y: auto; margin-bottom: 20px; padding-right: 5px;">
                 <!-- Metrics and their basic config here -->
             </div>
