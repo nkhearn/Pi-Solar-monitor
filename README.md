@@ -14,7 +14,7 @@ The system periodically polls various data sources via custom "collectors", stor
 ## 📺 Visual Overview
 
 ### Demo
-<video src="screenshots/dashboard_demo.webm" autoplay loop muted playsinline controls width="100%">
+<video src="https://github.com/user-attachments/assets/58848a95-03f1-41e1-aaab-168bcb8906c3" autoplay loop muted playsinline controls width="100%">
 </video>
 
 ### Images
