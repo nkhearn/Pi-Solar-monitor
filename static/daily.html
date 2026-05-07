@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <title>Daily Report - Solar Monitor</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --container-bg: #ffffff;
+            --text-color: #333333;
+            --header-text: #2c3e50;
+            --card-shadow: rgba(0,0,0,0.1);
+            --card-title: #666666;
+            --accent-color: #3498db;
+            --border-color: #dddddd;
+            --warning-color: #e67e22;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #1a1a1a;
+            --container-bg: #2d2d2d;
+            --text-color: #e0e0e0;
+            --header-text: #ffffff;
+            --card-shadow: rgba(0,0,0,0.3);
+            --card-title: #aaaaaa;
+            --border-color: #444444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        h1 { margin: 0; color: var(--header-text); font-size: 1.5rem; }
+
+        .btn {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--container-bg);
+            color: var(--text-color);
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9em;
+        }
+        .btn:hover { background: var(--border-color); }
+
+        .controls-card {
+            background: var(--container-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px var(--card-shadow);
+            border: 1px solid var(--border-color);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .date-input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="date"] {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+            color: var(--text-color);
+            font-size: 1rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: var(--container-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px var(--card-shadow);
+            border: 1px solid var(--border-color);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .card h3 {
+            margin: 0;
+            font-size: 0.9em;
+            color: var(--card-title);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .card .value-row {
+            display: flex;
+            align-items: baseline;
+            gap: 5px;
+        }
+        .card .value {
+            font-size: 2.2em;
+            font-weight: bold;
+            color: var(--header-text);
+        }
+        .card .unit {
+            font-size: 1.2em;
+            color: var(--card-title);
+        }
+        .card .status-text {
+            font-size: 0.9em;
+            font-weight: 600;
+            color: var(--accent-color);
+        }
+        .card .description {
+            font-size: 0.85em;
+            color: var(--card-title);
+        }
+        .badge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 0.7em;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+        .badge-warning {
+            background-color: var(--warning-color);
+            color: white;
+        }
+
+        #loadingOverlay {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+            display: none;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 50px;
+            background: var(--container-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 12px; }
+            .controls-card { flex-direction: column; align-items: stretch; }
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <a href="/" class="btn" title="Back to Dashboard">🏠</a>
+                <h1>Daily Report</h1>
+            </div>
+            <button id="themeToggle" class="btn" title="Toggle theme">🌙</button>
+        </header>
+
+        <div class="controls-card">
+            <div class="date-input-group">
+                <label for="dateInput">Select Date:</label>
+                <input type="date" id="dateInput">
+                <button id="todayBtn" class="btn">Today</button>
+                <button id="yesterdayBtn" class="btn">Yesterday</button>
+            </div>
+            <div id="sampleCount" style="font-size: 0.85em; opacity: 0.8;"></div>
+        </div>
+
+        <div id="loadingOverlay">Calculating report...</div>
+        <div class="grid" id="reportGrid">
+            <!-- Cards will be injected here -->
+        </div>
+    </div>
+
+    <script>
+        const dateInput = document.getElementById('dateInput');
+        const reportGrid = document.getElementById('reportGrid');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const themeToggle = document.getElementById('themeToggle');
+        const sampleCountEl = document.getElementById('sampleCount');
+
+        // Theme management
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            themeToggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+        }
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+        });
+        const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        setTheme(savedTheme);
+
+        async function loadReport() {
+            const date = dateInput.value;
+            if (!date) return;
+
+            reportGrid.innerHTML = '';
+            loadingOverlay.style.display = 'block';
+            sampleCountEl.textContent = '';
+
+            try {
+                const response = await fetch(`/api/daily_report?date=${date}`);
+                const data = await response.json();
+                loadingOverlay.style.display = 'none';
+
+                if (data.error) {
+                    reportGrid.innerHTML = `<div class="no-data">${data.error}</div>`;
+                    return;
+                }
+
+                sampleCountEl.textContent = `${data.sample_count} data points collected`;
+
+                data.metrics.forEach(metric => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+
+                    if (metric.partial) {
+                        const badge = document.createElement('div');
+                        badge.className = 'badge badge-warning';
+                        badge.textContent = 'Partial Data';
+                        card.appendChild(badge);
+                    }
+
+                    const title = document.createElement('h3');
+                    title.textContent = metric.title;
+                    card.appendChild(title);
+
+                    const valueRow = document.createElement('div');
+                    valueRow.className = 'value-row';
+
+                    const value = document.createElement('span');
+                    value.className = 'value';
+                    value.textContent = metric.value;
+                    valueRow.appendChild(value);
+
+                    if (metric.unit) {
+                        const unit = document.createElement('span');
+                        unit.className = 'unit';
+                        unit.textContent = metric.unit;
+                        valueRow.appendChild(unit);
+                    }
+                    card.appendChild(valueRow);
+
+                    if (metric.status) {
+                        const status = document.createElement('div');
+                        status.className = 'status-text';
+                        status.textContent = metric.status;
+                        card.appendChild(status);
+                    }
+
+                    if (metric.description) {
+                        const desc = document.createElement('div');
+                        desc.className = 'description';
+                        desc.textContent = metric.description;
+                        card.appendChild(desc);
+                    }
+
+                    if (metric.error) {
+                        const err = document.createElement('div');
+                        err.className = 'description';
+                        err.style.color = '#e74c3c';
+                        err.textContent = metric.error;
+                        card.appendChild(err);
+                    }
+
+                    reportGrid.appendChild(card);
+                });
+            } catch (e) {
+                loadingOverlay.style.display = 'none';
+                reportGrid.innerHTML = `<div class="no-data">Error loading report: ${e.message}</div>`;
+            }
+        }
+
+        dateInput.onchange = loadReport;
+
+        document.getElementById('todayBtn').onclick = () => {
+            dateInput.value = new Date().toISOString().split('T')[0];
+            loadReport();
+        };
+
+        document.getElementById('yesterdayBtn').onclick = () => {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            dateInput.value = yesterday.toISOString().split('T')[0];
+            loadReport();
+        };
+
+        // Init with yesterday
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        dateInput.value = yesterday.toISOString().split('T')[0];
+        loadReport();
+    </script>
+</body>
+</html>
