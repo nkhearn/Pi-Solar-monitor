@@ -511,7 +511,7 @@ async def get_daily_report(date: str = Query(...)):
                         clipping_report["status"] = "Clipping Detected"
                     else:
                         clipping_report["status"] = "Normal"
-                except:
+                except Exception:
                     clipping_report["error"] = "Irregular data for curve fitting"
             else:
                 clipping_report["error"] = "Insufficient active sun data"
