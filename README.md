@@ -81,6 +81,7 @@ Detailed documentation for installation, customization, and advanced usage is av
 - [**🖥️ Usage Guide**](docs/usage.md) - Dashboard customization and Macrodroid integration.
 - [**🔌 Data Collectors**](docs/collectors.md) - How to write and schedule your own sensors.
 - [**⚡ Conditional Actions**](docs/conditions.md) - Automation based on real-time and historical metrics.
+- [**📋 Daily Report**](docs/daily_report.md) - Detailed analysis of daily solar yield and efficiency.
 - [**📡 REST API**](docs/api.md) - Endpoint documentation and query parameters.
 - [**🛰️ WebSockets**](docs/websockets.md) - Real-time data streaming specifications.
 
