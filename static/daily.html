@@ -112,8 +112,10 @@
             cursor: pointer;
             transition: transform 0.2s;
         }
-        .card:hover {
+        .card:hover, .card:focus {
             transform: translateY(-2px);
+            outline: 2px solid var(--accent-color);
+            outline-offset: 2px;
         }
         .card h3 {
             margin: 0;
