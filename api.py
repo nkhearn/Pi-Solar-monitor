@@ -507,7 +507,7 @@ async def get_daily_report(date: str = Query(...)):
                     # For simplicity and matching user script: sum / 60
                     total_missed_wh = np.sum(missed_w) / 60
                     clipping_report["value"] = round(total_missed_wh, 2)
-                    if max_observed > popt[0] * 0.95:
+                    if max_observed < popt[0] * 0.95:
                         clipping_report["status"] = "Clipping Detected"
                     else:
                         clipping_report["status"] = "Normal"
