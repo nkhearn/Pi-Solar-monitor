@@ -277,6 +277,14 @@
                     const card = document.createElement('div');
                     card.className = 'card';
                     card.onclick = () => card.classList.toggle('expanded');
+                    card.tabIndex = 0;
+                    card.role = "button";
+                    card.onkeydown = (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            card.classList.toggle('expanded');
+                        }
+                    };
 
                     if (metric.partial) {
                         const badge = document.createElement('div');
