@@ -577,13 +577,13 @@ async def get_daily_report(date: str = Query(...)):
     peak_load_hour = {"title": "Peak Load Hour", "value": "N/A", "unit": "", "partial": len(rows) < 1300}
     if len(load_power) > 60:
         hourly_loads = []
-        for h in range(24):
-            h_start = f"{target_date} {h:02d}:00:00"
-            h_end = f"{target_date} {h:02d}:59:59"
-            mask = [(ts >= h_start and ts <= h_end) for ts in timestamps]
-            if any(mask):
-                avg_l = np.mean(load_power[mask])
-                hourly_loads.append((h, avg_l))
+        hourly_sums = {}
+        hourly_counts = {}
+        for i, ts in enumerate(timestamps):
+            hour = ts[11:13]
+            hourly_sums[hour] = hourly_sums.get(hour, 0) + load_power[i]
+            hourly_counts[hour] = hourly_counts.get(hour, 0) + 1
+        hourly_loads = [(int(h), hourly_sums[h] / hourly_counts[h]) for h in hourly_sums]
         if hourly_loads:
             best_h, val = max(hourly_loads, key=lambda x: x[1])
             peak_load_hour["value"] = f"{best_h:02d}:00"
