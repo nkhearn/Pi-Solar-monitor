@@ -307,7 +307,7 @@
         dateInput.onchange = loadReport;
 
         document.getElementById('todayBtn').onclick = () => {
-            dateInput.value = new Date().toISOString().split('T')[0];
+            dateInput.value = new Date().toLocaleDateString('en-CA');
             loadReport();
         };
 
