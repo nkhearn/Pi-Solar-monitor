@@ -467,24 +467,42 @@ async def get_daily_report(date: str = Query(...)):
     if not rows:
         return {"error": "No data found for this date", "date": date}
 
-    data_by_key = {}
+    v_metrics = await get_virtual_metrics_map()
+    columns = [description[0] for description in cursor.description]
+
+    data_by_key = {col: [] for col in columns if col not in ('id', 'timestamp')}
+    for vm_name in v_metrics:
+        data_by_key[vm_name] = []
+
     timestamps = []
-    if rows:
-        keys = [k for k in rows[0].keys() if k not in ('id', 'timestamp')]
-        for row in rows:
-            timestamps.append(row['timestamp'])
-            for key in keys:
-                data_by_key.setdefault(key, []).append(row[key])
+    for row in rows:
+        row_dict = dict(zip(columns, row))
+        # Evaluate virtual metrics for each row to allow them in calculations
+        for name, formula in v_metrics.items():
+            row_dict[name] = evaluate_formula(formula, row_dict)
+
+        timestamps.append(row_dict['timestamp'])
+        for key in data_by_key:
+            data_by_key[key].append(row_dict.get(key))
 
     # Fill Nones with 0 for power/voltage calculations
     def get_clean_series(key):
-        if key not in data_by_key: return np.array([])
+        if key not in data_by_key: return np.zeros(len(timestamps))
         return np.array([float(x) if x is not None else 0.0 for x in data_by_key[key]])
 
     results = []
 
-    # 1. Missed PV Power Yield (Clipping)
+    # 0. Total Solar Generation (from provided script items)
     pv_power = get_clean_series('pv_input_power')
+    pv_wh = np.sum(pv_power) / 60
+    results.append({
+        "title": "Total Solar Yield",
+        "value": round(pv_wh, 1),
+        "unit": "Wh",
+        "partial": len(rows) < 1300
+    })
+
+    # 1. Missed PV Power Yield (Clipping)
     clipping_report = {"title": "PV Power Clipping", "value": "N/A", "unit": "Wh", "partial": False}
     if len(pv_power) > 60:
         max_observed = np.max(pv_power)
@@ -502,16 +520,14 @@ async def get_daily_report(date: str = Query(...)):
                     popt, _ = curve_fit(bell_curve, x_train, y_train, p0=p0, bounds=(lower, upper))
                     theoretical_p = bell_curve(times, *popt)
                     missed_w = np.maximum(0, theoretical_p - pv_power)
-                    # Assuming 1-minute intervals roughly.
-                    # More accurately: (total_missed_watts * minutes_between_samples) / 60
-                    # For simplicity and matching user script: sum / 60
                     total_missed_wh = np.sum(missed_w) / 60
-                    clipping_report["value"] = round(total_missed_wh, 2)
-                    if max_observed < popt[0] * 0.95:
+                    clipping_report["value"] = round(total_missed_wh, 1)
+                    clipping_report["description"] = f"Actual Peak: {max_observed:.0f}W | Theoretical Peak: {popt[0]:.0f}W"
+                    if max_observed > popt[0] * 0.95:
                         clipping_report["status"] = "Clipping Detected"
                     else:
                         clipping_report["status"] = "Normal"
-                except Exception:
+                except:
                     clipping_report["error"] = "Irregular data for curve fitting"
             else:
                 clipping_report["error"] = "Insufficient active sun data"
@@ -521,7 +537,7 @@ async def get_daily_report(date: str = Query(...)):
     else:
         clipping_report["error"] = "Insufficient data points"
 
-    if len(rows) < 1300: clipping_report["partial"] = True # ~90% of a day
+    if len(rows) < 1300: clipping_report["partial"] = True
     results.append(clipping_report)
 
     # 2. Daily Self-Consumption Ratio (%)
@@ -577,13 +593,13 @@ async def get_daily_report(date: str = Query(...)):
     peak_load_hour = {"title": "Peak Load Hour", "value": "N/A", "unit": "", "partial": len(rows) < 1300}
     if len(load_power) > 60:
         hourly_loads = []
-        hourly_sums = {}
-        hourly_counts = {}
-        for i, ts in enumerate(timestamps):
-            hour = ts[11:13]
-            hourly_sums[hour] = hourly_sums.get(hour, 0) + load_power[i]
-            hourly_counts[hour] = hourly_counts.get(hour, 0) + 1
-        hourly_loads = [(int(h), hourly_sums[h] / hourly_counts[h]) for h in hourly_sums]
+        for h in range(24):
+            h_start = f"{target_date} {h:02d}:00:00"
+            h_end = f"{target_date} {h:02d}:59:59"
+            mask = [(ts >= h_start and ts <= h_end) for ts in timestamps]
+            if any(mask):
+                avg_l = np.mean(load_power[mask])
+                hourly_loads.append((h, avg_l))
         if hourly_loads:
             best_h, val = max(hourly_loads, key=lambda x: x[1])
             peak_load_hour["value"] = f"{best_h:02d}:00"
