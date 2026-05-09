@@ -469,12 +469,12 @@ async def get_daily_report(date: str = Query(...)):
 
     data_by_key = {}
     timestamps = []
-    for row in rows:
-        timestamps.append(row['timestamp'])
-        for key in row.keys():
-            if key in ('id', 'timestamp'): continue
-            if key not in data_by_key: data_by_key[key] = []
-            data_by_key[key].append(row[key])
+    if rows:
+        keys = [k for k in rows[0].keys() if k not in ('id', 'timestamp')]
+        for row in rows:
+            timestamps.append(row['timestamp'])
+            for key in keys:
+                data_by_key.setdefault(key, []).append(row[key])
 
     # Fill Nones with 0 for power/voltage calculations
     def get_clean_series(key):
