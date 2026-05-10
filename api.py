@@ -10,8 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta, timezone
 import re
 import ast
-import numpy as np
-from scipy.optimize import curve_fit
+from daily_report import generate_report_data
 
 DB_PATH = "data/inverter_logs.db"
 
@@ -440,10 +439,6 @@ async def get_chart_data(
     elif chart_type == "line":
         return await get_data_history(key=metric, start=period, limit=limit)
 
-def bell_curve(x, a, x0, sigma):
-    """Gaussian model for a single solar day."""
-    return a * np.exp(-(x - x0)**2 / (2 * sigma**2))
-
 @app.get("/api/daily_report")
 async def get_daily_report(date: str = Query(...)):
     """
@@ -470,152 +465,13 @@ async def get_daily_report(date: str = Query(...)):
     v_metrics = await get_virtual_metrics_map()
     columns = [description[0] for description in cursor.description]
 
-    data_by_key = {col: [] for col in columns if col not in ('id', 'timestamp')}
-    for vm_name in v_metrics:
-        data_by_key[vm_name] = []
-
-    timestamps = []
-    for row in rows:
-        row_dict = dict(zip(columns, row))
-        # Evaluate virtual metrics for each row to allow them in calculations
-        for name, formula in v_metrics.items():
-            row_dict[name] = evaluate_formula(formula, row_dict)
-
-        timestamps.append(row_dict['timestamp'])
-        for key in data_by_key:
-            data_by_key[key].append(row_dict.get(key))
-
-    # Fill Nones with 0 for power/voltage calculations
-    def get_clean_series(key):
-        if key not in data_by_key: return np.zeros(len(timestamps))
-        return np.array([float(x) if x is not None else 0.0 for x in data_by_key[key]])
-
-    results = []
-
-    # 0. Total Solar Generation (from provided script items)
-    pv_power = get_clean_series('pv_input_power')
-    pv_wh = np.sum(pv_power) / 60
-    results.append({
-        "title": "Total Solar Yield",
-        "value": round(pv_wh, 1),
-        "unit": "Wh",
-        "partial": len(rows) < 1300
-    })
-
-    # 1. Missed PV Power Yield (Clipping)
-    clipping_report = {"title": "PV Power Clipping", "value": "N/A", "unit": "Wh", "partial": False}
-    if len(pv_power) > 60:
-        max_observed = np.max(pv_power)
-        if max_observed > 10:
-            times = np.arange(len(pv_power))
-            mask = (pv_power > (max_observed * 0.15)) & (pv_power < (max_observed * 0.80))
-            x_train = times[mask]
-            y_train = pv_power[mask]
-
-            if len(x_train) >= 60:
-                try:
-                    p0 = [max_observed * 1.1, np.argmax(pv_power), 150]
-                    lower = [max_observed, 0, 50]
-                    upper = [max_observed * 3, len(pv_power) * 1.5, 600]
-                    popt, _ = curve_fit(bell_curve, x_train, y_train, p0=p0, bounds=(lower, upper))
-                    theoretical_p = bell_curve(times, *popt)
-                    missed_w = np.maximum(0, theoretical_p - pv_power)
-                    total_missed_wh = np.sum(missed_w) / 60
-                    clipping_report["value"] = round(total_missed_wh, 1)
-                    clipping_report["description"] = f"Actual Peak: {max_observed:.0f}W | Theoretical Peak: {popt[0]:.0f}W"
-                    if max_observed > popt[0] * 0.95:
-                        clipping_report["status"] = "Clipping Detected"
-                    else:
-                        clipping_report["status"] = "Normal"
-                except:
-                    clipping_report["error"] = "Irregular data for curve fitting"
-            else:
-                clipping_report["error"] = "Insufficient active sun data"
-        else:
-            clipping_report["value"] = 0
-            clipping_report["status"] = "Night time / Low Power"
-    else:
-        clipping_report["error"] = "Insufficient data points"
-
-    if len(rows) < 1300: clipping_report["partial"] = True
-    results.append(clipping_report)
-
-    # 2. Daily Self-Consumption Ratio (%)
-    # (Solar used by load) / (Total Solar)
-    # Solar used by load = Total Load - (Grid Power if any) - (Battery Discharge if positive)
-    # This is complex without knowing all flows. Let's simplify:
-    # If battery is charging: Solar used = Load + Charge
-    # If battery is discharging: Solar used = Solar (all goes to load)
-    # Ratio = (Solar - Battery Charge) / Solar? No.
-    # Self consumption = (Solar - Export) / Solar. We don't have export.
-    # Let's use: (Load met by Solar) / (Total Solar)
-    load_power = get_clean_series('ac_output_active_power')
-    pv_power = get_clean_series('pv_input_power')
-    batt_charge = get_clean_series('battery_charging_current') * get_clean_series('battery_voltage')
-
-    # Solar used directly = min(PV, Load) - actually it's PV - Charge (if we assume PV goes to battery first or load first)
-    # Let's use: (PV energy - Battery Charge energy) / PV energy  (percentage of solar that went straight to load)
-    pv_wh = np.sum(pv_power) / 60
-    charge_wh = np.sum(batt_charge) / 60
-
-    self_cons = {"title": "Solar Self-Consumption", "value": "N/A", "unit": "%", "partial": len(rows) < 1300}
-    if pv_wh > 10:
-        direct_wh = max(0, pv_wh - charge_wh)
-        ratio = (direct_wh / pv_wh) * 100
-        self_cons["value"] = round(min(100, ratio), 1)
-    results.append(self_cons)
-
-    # 3. Battery Round-trip Efficiency (%)
-    # Discharge / Charge
-    batt_disch = get_clean_series('battery_discharge_current') * get_clean_series('battery_voltage')
-    disch_wh = np.sum(batt_disch) / 60
-    # charge_wh already calculated
-    batt_eff = {"title": "Battery Efficiency", "value": "N/A", "unit": "%", "partial": len(rows) < 1300}
-    if charge_wh > 10:
-        eff = (disch_wh / charge_wh) * 100
-        batt_eff["value"] = round(min(100, eff), 1)
-    results.append(batt_eff)
-
-    # 4. Solar Harvest Efficiency
-    # Actual PV Wh / Predicted Wh
-    solar_predict = get_clean_series('solar_prediction')
-    # Solar prediction might only be available in some rows or one row.
-    # Let's take the max or the one from the start of the day.
-    predicted_wh = np.max(solar_predict) if len(solar_predict) > 0 else 0
-    harvest_eff = {"title": "Solar Harvest Efficiency", "value": "N/A", "unit": "%", "partial": len(rows) < 1300}
-    if predicted_wh > 10 and pv_wh > 0:
-        h_ratio = (pv_wh / predicted_wh) * 100
-        harvest_eff["value"] = round(h_ratio, 1)
-    results.append(harvest_eff)
-
-    # 5. Peak Load Hour
-    # Hour with max average load
-    peak_load_hour = {"title": "Peak Load Hour", "value": "N/A", "unit": "", "partial": len(rows) < 1300}
-    if len(load_power) > 60:
-        hourly_loads = []
-        for h in range(24):
-            h_start = f"{target_date} {h:02d}:00:00"
-            h_end = f"{target_date} {h:02d}:59:59"
-            mask = [(ts >= h_start and ts <= h_end) for ts in timestamps]
-            if any(mask):
-                avg_l = np.mean(load_power[mask])
-                hourly_loads.append((h, avg_l))
-        if hourly_loads:
-            best_h, val = max(hourly_loads, key=lambda x: x[1])
-            peak_load_hour["value"] = f"{best_h:02d}:00"
-            peak_load_hour["description"] = f"Avg load: {val:.0f}W"
-    results.append(peak_load_hour)
-
-    # 6. Grid/Generator Dependency
-    # AC Input Wh / (AC Input Wh + PV Wh + Battery Discharge Wh)
-    ac_input = get_clean_series('ac_input_active_power') # Might not exist, fallback to 0
-    ac_wh = np.sum(ac_input) / 60
-    total_in_wh = ac_wh + pv_wh + disch_wh
-    grid_dep = {"title": "Energy Source: AC Input", "value": "N/A", "unit": "%", "partial": len(rows) < 1300}
-    if total_in_wh > 10:
-        dep_ratio = (ac_wh / total_in_wh) * 100
-        grid_dep["value"] = round(dep_ratio, 1)
-    results.append(grid_dep)
+    results = generate_report_data(
+        date=date,
+        rows=rows,
+        v_metrics=v_metrics,
+        evaluate_formula=evaluate_formula,
+        columns=columns
+    )
 
     return {
         "date": date,
