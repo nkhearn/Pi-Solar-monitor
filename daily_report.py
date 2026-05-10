@@ -212,6 +212,13 @@ def generate_report_data(date, rows, v_metrics, evaluate_formula, columns):
         grid_dep["value"] = round(dep_ratio, 1)
     results.append(grid_dep)
 
+    # Sanitize results to ensure all numeric values are standard Python types
+    # (FastAPI/JSON serialization can fail on numpy types)
+    for res in results:
+        val = res.get("value")
+        if isinstance(val, np.generic):
+            res["value"] = val.item()
+
     # HOW TO ADD AN ADDITIONAL METRIC:
     # -------------------------------
     # 1. Calculate your metric's value. Use 'get_clean_series(key)' to get a numpy array

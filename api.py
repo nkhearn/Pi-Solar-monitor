@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta, timezone
 import re
 import ast
+import traceback
 from daily_report import generate_report_data
 
 DB_PATH = "data/inverter_logs.db"
@@ -465,13 +466,17 @@ async def get_daily_report(date: str = Query(...)):
     v_metrics = await get_virtual_metrics_map()
     columns = [description[0] for description in cursor.description]
 
-    results = generate_report_data(
-        date=date,
-        rows=rows,
-        v_metrics=v_metrics,
-        evaluate_formula=evaluate_formula,
-        columns=columns
-    )
+    try:
+        results = generate_report_data(
+            date=date,
+            rows=rows,
+            v_metrics=v_metrics,
+            evaluate_formula=evaluate_formula,
+            columns=columns
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error generating report: {str(e)}")
 
     return {
         "date": date,
