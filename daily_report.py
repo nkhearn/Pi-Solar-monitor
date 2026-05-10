@@ -111,7 +111,7 @@ def generate_report_data(date, rows, v_metrics, evaluate_formula, columns):
                         "description": f"Actual Peak: {max_observed:.0f}W | Theoretical Peak: {popt[0]:.0f}W",
                         "status":      "Clipping Detected" if max_observed > popt[0] * 0.95 else "Normal"
                     })
-                except Exception:
+                except (RuntimeError, ValueError):
                     missed_solar_report["error"] = "Irregular data for curve fitting"
             else:
                 missed_solar_report["error"] = "Insufficient active sun data"
