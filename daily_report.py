@@ -48,7 +48,8 @@ def generate_report_data(date, rows, v_metrics, evaluate_formula, columns):
 
     def safe_float(x):
         try:
-            return float(x) if x is not None else 0.0
+            val = float(x) if x is not None else 0.0
+            return val if np.isfinite(val) else 0.0
         except (ValueError, TypeError):
             return 0.0
 
