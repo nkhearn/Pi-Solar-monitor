@@ -327,7 +327,7 @@
 
                     const explanation = document.createElement('div');
                     explanation.className = 'explanation';
-                    explanation.textContent = metric.html_description || "Detailed information for this metric.";
+                    explanation.innerHTML = metric.html_description || "Detailed information for this metric.";
                     card.appendChild(explanation);
 
                     reportGrid.appendChild(card);
