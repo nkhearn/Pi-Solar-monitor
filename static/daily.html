@@ -256,15 +256,8 @@
                 const data = await response.json();
                 loadingOverlay.style.display = 'none';
 
-                if (data.error || data.detail) {
-                    const msg = data.error || (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
-                    reportGrid.innerHTML = '<div class="no-data"></div>';
-                    reportGrid.querySelector(".no-data").textContent = msg;
-                    return;
-                }
-
-                if (!data.metrics || data.metrics.length === 0) {
-                    reportGrid.innerHTML = '<div class="no-data">No report data returned.</div>';
+                if (data.error) {
+                    reportGrid.innerHTML = `<div class="no-data">${data.error}</div>`;
                     return;
                 }
 
