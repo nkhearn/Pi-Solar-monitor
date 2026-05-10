@@ -46,13 +46,10 @@ def generate_report_data(date, rows, v_metrics, evaluate_formula, columns):
         for key in data_by_key:
             data_by_key[key].append(row_dict.get(key))
 
-    for key in data_by_key:
-        data_by_key[key] = np.array([float(x) if x is not None else 0.0 for x in data_by_key[key]])
-
     def get_clean_series(key):
         """Helper to get a numeric numpy array, replacing Nones with 0.0"""
         if key not in data_by_key: return np.zeros(len(timestamps))
-        return data_by_key[key]
+        return np.array([float(x) if x is not None else 0.0 for x in data_by_key[key]])
 
     results = []
     # Standard day has 1440 minutely samples. We flag as partial if significantly fewer.
@@ -111,7 +108,7 @@ def generate_report_data(date, rows, v_metrics, evaluate_formula, columns):
                         "description": f"Actual Peak: {max_observed:.0f}W | Theoretical Peak: {popt[0]:.0f}W",
                         "status":      "Clipping Detected" if max_observed > popt[0] * 0.95 else "Normal"
                     })
-                except (RuntimeError, ValueError):
+                except Exception:
                     missed_solar_report["error"] = "Irregular data for curve fitting"
             else:
                 missed_solar_report["error"] = "Insufficient active sun data"
