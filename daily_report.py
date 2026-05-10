@@ -47,7 +47,16 @@ def generate_report_data(date, rows, v_metrics, evaluate_formula, columns):
             data_by_key[key].append(row_dict.get(key))
 
     for key in data_by_key:
-        data_by_key[key] = np.array([float(x) if x is not None else 0.0 for x in data_by_key[key]])
+        processed_values = []
+        for x in data_by_key[key]:
+            if x is None:
+                processed_values.append(0.0)
+            else:
+                try:
+                    processed_values.append(float(x))
+                except (ValueError, TypeError):
+                    processed_values.append(0.0)
+        data_by_key[key] = np.array(processed_values)
 
     def get_clean_series(key):
         """Helper to get a numeric numpy array, replacing Nones with 0.0"""
