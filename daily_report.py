@@ -215,9 +215,9 @@ def generate_report_data(date, rows, v_metrics, evaluate_formula, columns):
     # Sanitize results to ensure all numeric values are standard Python types
     # (FastAPI/JSON serialization can fail on numpy types)
     for res in results:
-        val = res.get("value")
-        if isinstance(val, np.generic):
-            res["value"] = val.item()
+        for k, v in res.items():
+            if isinstance(v, np.generic):
+                res[k] = v.item()
 
     # HOW TO ADD AN ADDITIONAL METRIC:
     # -------------------------------
