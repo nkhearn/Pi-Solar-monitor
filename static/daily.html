@@ -257,7 +257,9 @@
                 loadingOverlay.style.display = 'none';
 
                 if (data.error || data.detail) {
-                    reportGrid.innerHTML = `<div class="no-data">${data.error || data.detail}</div>`;
+                    const msg = data.error || (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail));
+                    reportGrid.innerHTML = '<div class="no-data"></div>';
+                    reportGrid.querySelector(".no-data").textContent = msg;
                     return;
                 }
 
