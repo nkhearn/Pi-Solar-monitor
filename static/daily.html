@@ -263,8 +263,8 @@
                     return;
                 }
 
-                if (!data.metrics) {
-                    reportGrid.innerHTML = `<div class="no-data">No report data returned.</div>`;
+                if (!data.metrics || data.metrics.length === 0) {
+                    reportGrid.innerHTML = '<div class="no-data">No report data returned.</div>';
                     return;
                 }
 
