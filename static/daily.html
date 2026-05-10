@@ -256,8 +256,13 @@
                 const data = await response.json();
                 loadingOverlay.style.display = 'none';
 
-                if (data.error) {
-                    reportGrid.innerHTML = `<div class="no-data">${data.error}</div>`;
+                if (data.error || data.detail) {
+                    reportGrid.innerHTML = `<div class="no-data">${data.error || data.detail}</div>`;
+                    return;
+                }
+
+                if (!data.metrics) {
+                    reportGrid.innerHTML = `<div class="no-data">No report data returned.</div>`;
                     return;
                 }
 
