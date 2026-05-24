@@ -73,7 +73,16 @@ Returns an alphabetical list of all data keys currently in the database, includi
 
 - **Success Response**:
   - **Code**: 200
-  - **Content**: `["battery_voltage", "efficiency", "pv_input_power", ...]`
+  - **Content**:
+    ```json
+    [
+        "battery_voltage",
+        "efficiency",
+        "pv_input_power",
+        "solar_prediction",
+        "water_temp"
+    ]
+    ```
 
 ---
 
