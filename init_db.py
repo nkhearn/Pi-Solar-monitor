@@ -83,10 +83,11 @@ def backup_database(src, dest):
 
     src_conn = sqlite3.connect(src)
     dest_conn = sqlite3.connect(dest)
-    with dest_conn:
+    try:
         src_conn.backup(dest_conn)
-    dest_conn.close()
-    src_conn.close()
+    finally:
+        dest_conn.close()
+        src_conn.close()
 
 def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
