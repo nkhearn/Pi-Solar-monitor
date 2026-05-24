@@ -20,7 +20,7 @@ def sanitize_column_name(name):
 def get_row_count(conn, table_name):
     cursor = conn.cursor()
     try:
-        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        cursor.execute(f'SELECT COUNT(*) FROM "{table_name}"')
         return cursor.fetchone()[0]
     except sqlite3.OperationalError:
         return 0
