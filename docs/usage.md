@@ -38,6 +38,15 @@ Toggle between **Light** and **Dark** modes using the toggle in the header. Your
 
 ![Dashboard Dark Mode](../screenshots/dashboard_dark.png)
 
+### 🛠️ Metric Customization
+You can tailor the dashboard to your specific needs by clicking the **⚙️ (Settings)** icon in the header.
+- **Rename**: Change the display name of any metric.
+- **Color**: Assign a custom color to the metric card's accent border.
+- **Reorder**: Change the sequence in which metrics appear by adjusting their "Order" value (lower numbers appear first).
+- **Hide**: Toggle the visibility of any metric.
+
+These configurations are saved to the server and will persist across all your devices.
+
 ### 📈 Adding Charts
 You can add custom charts to visualize any numeric metric.
 1. Click the **+ Add Chart** button.

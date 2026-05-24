@@ -1,6 +1,6 @@
 # 📡 REST API Documentation
 
-The **Pi Solar Monitor** provides a comprehensive REST API for accessing latest and historical data.
+The **Pi Solar Monitor** provides a comprehensive REST API for accessing live and historical data, managing virtual metrics, and configuring the dashboard.
 
 ## 🔗 Base URL
 `http://<your-pi-ip>:8000`
@@ -10,18 +10,26 @@ The **Pi Solar Monitor** provides a comprehensive REST API for accessing latest 
 ## 🌍 Global Endpoints
 
 ### `GET` /api/last
-Returns the most recent aggregated data point, including any defined virtual metrics.
+Returns the most recent aggregated data point. This is a merged view containing the latest values for all physical and virtual metrics, along with their individual timestamps.
+
+- **Example Request**:
+  `GET /api/last`
 
 - **Success Response**:
   - **Code**: 200
   - **Content**:
     ```json
     {
-        "timestamp": "2026-03-17 15:44:01.031",
+        "timestamp": "2023-10-27 15:44:01",
         "data": {
-            "pv_power": 500,
-            "load": 200,
-            "efficiency": 2.5
+            "pv_input_power": 500.5,
+            "battery_voltage": 52.4,
+            "efficiency": 0.95
+        },
+        "metric_timestamps": {
+            "pv_input_power": "2023-10-27 15:44:01",
+            "battery_voltage": "2023-10-27 15:43:55",
+            "efficiency": "2023-10-27 15:44:01"
         }
     }
     ```
@@ -29,12 +37,15 @@ Returns the most recent aggregated data point, including any defined virtual met
 ---
 
 ### `GET` /api/history
-Returns a list of recent aggregated data points.
+Returns a list of recent system-wide data points.
 
 - **Query Parameters**:
     - `limit` (optional): Max number of records (default 100).
-    - `start` (optional): ISO timestamp or relative time (e.g., `1h`, `today`).
+    - `start` (optional): ISO timestamp (`2023-10-27 10:00:00`) or relative time (`1h`, `today`).
     - `end` (optional): ISO timestamp or relative time.
+
+- **Example Request**:
+  `GET /api/history?start=today&limit=5`
 
 - **Success Response**:
   - **Code**: 200
@@ -42,12 +53,12 @@ Returns a list of recent aggregated data points.
     ```json
     [
         {
-            "timestamp": "2026-03-17 15:44:01.031",
-            "data": { "solar_prediction": 1523.08, ... }
+            "timestamp": "2023-10-27 15:44:01",
+            "data": { "pv_input_power": 500.5, "battery_voltage": 52.4 }
         },
         {
-            "timestamp": "2026-03-17 15:43:41.152",
-            "data": { "solar_prediction": 1523.08, ... }
+            "timestamp": "2023-10-27 15:43:01",
+            "data": { "pv_input_power": 490.2, "battery_voltage": 52.3 }
         }
     ]
     ```
@@ -55,19 +66,21 @@ Returns a list of recent aggregated data points.
 ---
 
 ### `GET` /api/keys
-Returns a list of all unique data keys found in recent records, plus all defined virtual metrics.
+Returns an alphabetical list of all data keys currently in the database, including virtual metrics.
+
+- **Example Request**:
+  `GET /api/keys`
 
 - **Success Response**:
   - **Code**: 200
   - **Content**:
     ```json
     [
-        "ac_input_voltage",
         "battery_voltage",
-        "solar_prediction",
         "efficiency",
-        "water_in",
-        "water_out"
+        "pv_input_power",
+        "solar_prediction",
+        "water_temp"
     ]
     ```
 
@@ -75,93 +88,186 @@ Returns a list of all unique data keys found in recent records, plus all defined
 
 ## 📈 Data-Specific Endpoints
 
-These endpoints focus on a single metric (key) within the data. They support both physical and virtual metrics.
+These endpoints focus on a single metric (key) and support both physical and virtual metrics.
 
 ### `GET` /api/data/{key}/last
-Returns the most recent value for a specific key.
+Returns the most recent value and timestamp for a specific key.
+
+- **Example Request**:
+  `GET /api/data/pv_input_power/last`
 
 - **Success Response**:
   - **Code**: 200
   - **Content**:
     ```json
     {
-        "timestamp": "2026-03-17 15:45:01.080",
-        "value": 1523.08
+        "timestamp": "2023-10-27 15:45:01",
+        "value": 500.5
     }
     ```
 
 ---
 
 ### `GET` /api/data/{key}/history
-Returns historical values for a key in a compact format suitable for charting.
+Returns historical values for a key in a compact format.
 
 - **Query Parameters**:
+    - `start` (optional): ISO timestamp or relative time (`10s`, `5m`, `1h`, `7d`, `today`).
+    - `end` (optional): ISO timestamp or relative time.
+    - `gt` (optional): Filter values greater than this number.
+    - `lt` (optional): Filter values less than this number.
+    - `eq` (optional): Filter values equal to this number.
     - `limit` (optional): Default 100.
-    - `start`, `end` (optional): ISO timestamp or relative time (`10s`, `5m`, `1h`, `7d`, `today`).
-    - `gt`, `lt`, `eq` (optional): Value filters (Greater than, Less than, Equal to).
+
+- **Example Request (Relative Time)**:
+  `GET /api/data/battery_voltage/history?start=1h&limit=10`
+
+- **Example Request (Specific Date / Yesterday)**:
+  `GET /api/data/pv_input_power/history?start=2023-10-26 00:00:00&end=2023-10-26 23:59:59`
+  *(Note: To query for 'yesterday', provide the specific date range as shown above.)*
 
 - **Success Response**:
   - **Code**: 200
   - **Content**:
     ```json
     [
-        ["2026-03-17 15:45:01.080", 1523.08],
-        ["2026-03-17 15:44:01.031", 1523.08],
-        ["2026-03-17 15:43:41.152", 1523.08]
+        ["2023-10-27 15:45:01", 52.4],
+        ["2023-10-27 15:44:01", 52.4],
+        ["2023-10-27 15:43:01", 52.3]
     ]
     ```
 
 ---
 
 ### `GET` /api/data/{key}/stats
-Returns aggregate statistics for a key over a period.
+Returns summary statistics for a key over a period.
 
 - **Query Parameters**:
-    - `start`, `end` (optional): Time range.
-    - `gt`, `lt`, `eq` (optional): Value filters.
+    - `start`, `end`, `gt`, `lt`, `eq` (optional): Same as history endpoint.
+
+- **Example Request**:
+  `GET /api/data/pv_input_power/stats?start=today`
 
 - **Success Response**:
   - **Code**: 200
   - **Content**:
     ```json
     {
-        "avg": 1484.5020833333335,
-        "min": 1463.9,
-        "max": 1549.81,
-        "sum": 35628.05,
-        "count": 24
+        "avg": 450.2,
+        "min": 0.0,
+        "max": 1200.5,
+        "sum": 324140.0,
+        "count": 720
     }
     ```
 
 ---
 
 ### `GET` /api/data/{key}/stats/{stat_key}
-Returns a single specific statistic for a key.
+Returns a single specific statistic.
 
 - **URL Parameters**:
-    - `stat_key`: The statistic to return. Available: `avg`, `min`, `max`, `sum`, `count`.
+    - `stat_key`: `avg`, `min`, `max`, `sum`, or `count`.
 
-- **Query Parameters**:
-    - `start`, `end` (optional): Time range. Example: `24h` for the last 24 hours.
-    - `gt`, `lt`, `eq` (optional): Value filters.
-
-- **Example**: `/api/data/battery_voltage/stats/avg?start=24h`
+- **Example Request**:
+  `GET /api/data/battery_voltage/stats/avg?start=24h`
 
 - **Success Response**:
   - **Code**: 200
   - **Content**:
     ```json
     {
-        "value": 12.5
+        "value": 51.8
     }
     ```
 
 ---
 
-## 🧮 Virtual Metric Management Endpoints
+## 📋 Daily Report Endpoint
+
+### `GET` /api/daily_report
+Returns calculated daily metrics for a specific date.
+
+- **Query Parameters**:
+    - `date` (required): Date in `YYYY-MM-DD` format.
+
+- **Example Request**:
+  `GET /api/daily_report?date=2023-10-26`
+
+- **Success Response**:
+  - **Code**: 200
+  - **Content**:
+    ```json
+    {
+        "date": "2023-10-26",
+        "sample_count": 1440,
+        "metrics": [
+            {
+                "title": "Total Solar Yield",
+                "value": 12450.5,
+                "unit": "Wh",
+                "partial": false,
+                "html_description": "Total energy generated by your solar panels today."
+            },
+            {
+                "title": "Battery Efficiency",
+                "value": 94.2,
+                "unit": "%",
+                "partial": false,
+                "html_description": "How much energy you got back out of the battery compared to what you put in today."
+            }
+        ]
+    }
+    ```
+
+---
+
+## 📊 External Charts API
+
+### `GET` /api/chart/data
+A simplified endpoint for external integrations (e.g., custom widgets).
+
+- **Query Parameters**:
+    - `type` (required): `line` (for history) or `gauge` (for latest).
+    - `metric` (required): The data key.
+    - `period` (optional): Relative time (e.g., `1h`, `today`) for `line` charts.
+    - `limit` (optional): Max records for `line` charts.
+
+- **Example Request (Gauge)**:
+  `GET /api/chart/data?type=gauge&metric=pv_input_power`
+
+- **Success Response (Gauge)**:
+  - **Code**: 200
+  - **Content**:
+    ```json
+    {
+        "timestamp": "2023-10-27 15:45:01",
+        "value": 500.5
+    }
+    ```
+
+- **Example Request (Line)**:
+  `GET /api/chart/data?type=line&metric=pv_input_power&period=1h`
+
+- **Success Response (Line)**:
+  - **Code**: 200
+  - **Content**:
+    ```json
+    [
+        ["2023-10-27 15:45:01", 500.5],
+        ["2023-10-27 15:44:01", 495.0]
+    ]
+    ```
+
+---
+
+## 🧮 Virtual Metrics
 
 ### `GET` /api/virtual_metrics
-Returns all defined virtual metrics and their formulas.
+Lists all defined virtual metrics and their arithmetic formulas.
+
+- **Example Request**:
+  `GET /api/virtual_metrics`
 
 - **Success Response**:
   - **Code**: 200
@@ -178,11 +284,22 @@ Returns all defined virtual metrics and their formulas.
 ### `POST` /api/virtual_metrics
 Creates or updates a virtual metric.
 
-- **Request Body**:
+- **Example Request**:
+  `POST /api/virtual_metrics`
+  **Body**:
+  ```json
+  {
+      "name": "efficiency",
+      "formula": "pv_power / load"
+  }
+  ```
+
+- **Success Response**:
+  - **Code**: 200
+  - **Content**:
     ```json
     {
-        "name": "efficiency",
-        "formula": "pv_power / load"
+        "status": "success"
     }
     ```
 
@@ -191,46 +308,21 @@ Creates or updates a virtual metric.
 ### `DELETE` /api/virtual_metrics/{name}
 Deletes a virtual metric.
 
+- **Example Request**:
+  `DELETE /api/virtual_metrics/efficiency`
+
 - **Success Response**:
-  - **Code**: 200
-  - **Content**: `{"status": "success"}`
-
----
-
-## 📊 External Charts API
-
-### `GET` /api/chart/data
-Unified endpoint for external chart data access. Supports both historical trends and latest values.
-
-- **Query Parameters**:
-    - `type` (required): Chart type. Available: `line` (historical), `gauge` (latest).
-    - `metric` (required): The data key to retrieve.
-    - `period` (optional): Relative time range (e.g., `1h`, `24h`, `7d`, `today`). Only applicable for `type=line`.
-    - `limit` (optional): Max number of records for historical data (default 100).
-
-- **Success Response (type=gauge)**:
   - **Code**: 200
   - **Content**:
     ```json
     {
-        "timestamp": "2026-03-17 15:45:01.080",
-        "value": 1523.08
+        "status": "success"
     }
-    ```
-
-- **Success Response (type=line)**:
-  - **Code**: 200
-  - **Content**:
-    ```json
-    [
-        ["2026-03-17 15:45:01.080", 1523.08],
-        ["2026-03-17 15:44:01.031", 1523.08]
-    ]
     ```
 
 ---
 
-## 📊 Dashboard Chart Endpoints
+## ⚙️ Configuration Endpoints
 
 ### `GET` /api/charts
 Returns the persistent dashboard chart configuration.
@@ -253,27 +345,74 @@ Returns the persistent dashboard chart configuration.
 ---
 
 ### `POST` /api/charts
-Saves the dashboard chart configuration. Overwrites existing configuration.
+Saves the dashboard chart configuration.
 
-- **Request Body**:
+- **Example Request**:
+  `POST /api/charts`
+  **Body**:
+  ```json
+  [
+      {
+          "id": "1710712345678",
+          "title": "Solar Power",
+          "metric": "pv_power",
+          "type": "line",
+          "range": "1h"
+      }
+  ]
+  ```
+
+---
+
+### `GET` /api/metric_configs
+Returns customization settings for all metrics.
+
+- **Success Response**:
+  - **Code**: 200
+  - **Content**:
     ```json
-    [
-        {
-            "id": "1710712345678",
-            "title": "Solar Power",
-            "metric": "pv_power",
-            "type": "line",
-            "range": "1h"
+    {
+        "pv_input_power": {
+            "displayName": "Solar Production",
+            "color": "#f1c40f",
+            "hidden": false,
+            "order": 1
         }
-    ]
+    }
     ```
 
 ---
 
-## ⏲️ Time Filtering Format
+### `POST` /api/metric_configs
+Updates customization settings for one or more metrics.
 
-The `start` and `end` parameters support:
-- **ISO Timestamps**: `2023-10-27 10:00:00`
-- **Relative Strings**:
-    - `today`: Since midnight.
-    - `[number][unit]`: Where unit is `s` (seconds), `m` (minutes), `h` (hours), or `d` (days). Example: `24h` for the last 24 hours.
+- **Example Request**:
+  `POST /api/metric_configs`
+  **Body**:
+  ```json
+  {
+      "pv_input_power": {
+          "displayName": "Solar Production",
+          "color": "#f1c40f",
+          "hidden": false,
+          "order": 1
+      }
+  }
+  ```
+
+---
+
+## ⏲️ Time & Date Formats
+
+### Relative Time
+Used in `start`, `end`, and `period` parameters:
+- `today`: Since 00:00:00 UTC.
+- `[n][unit]`: `s` (seconds), `m` (minutes), `h` (hours), `d` (days). Example: `12h`, `30m`.
+
+### Timestamps
+Absolute timestamps should follow the internal format: `YYYY-MM-DD HH:MM:SS`.
+Example: `2023-10-26 14:30:00`.
+
+### Date Parameters
+For the Daily Report, use `YYYY-MM-DD`.
+Example: `2023-10-26`.

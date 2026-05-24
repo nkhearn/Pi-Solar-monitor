@@ -38,11 +38,14 @@ Sent when a new collection cycle completes.
 {
     "type": "new_data",
     "payload": {
-        "timestamp": "YYYY-MM-DD HH:MM:SS.sss",
+        "timestamp": "YYYY-MM-DD HH:MM:SS",
         "data": {
             "key1": value,
-            "key2": value,
-            ...
+            "key2": value
+        },
+        "metric_timestamps": {
+            "key1": "YYYY-MM-DD HH:MM:SS",
+            "key2": "YYYY-MM-DD HH:MM:SS"
         }
     }
 }

@@ -13,6 +13,7 @@ Explore the core sections to get started, customize your setup, or integrate wit
 | [**⚙️ Installation**](installation.md) | How to set up the hardware and software. |
 | [**🖥️ Usage**](usage.md) | Dashboard overview, themes, and customization. |
 | [**📉 Charts Explorer**](charts_explorer.md) | Advanced historical data analysis and visualization. |
+| [**📋 Daily Report**](daily_report.md) | Detailed analysis of daily solar yield and efficiency. |
 | [**🔌 Collectors**](collectors.md) | Managing and creating data collection scripts. |
 | [**🧮 Virtual Metrics**](virtual_metrics.md) | Create calculated metrics using arithmetic formulas. |
 | [**⚡ Conditional Actions**](conditions.md) | Automate actions based on live system data. |
@@ -36,9 +37,12 @@ Pi-Solar-Monitor is designed to be:
 
 - **Advanced Virtual Metrics**: Create calculated values using arithmetic formulas with secure server-side evaluation.
 - **Conditional Action Engine**: Define complex logic in `.cond` files to trigger shell commands or scripts based on system metrics.
-- **High-Performance API**: Slim history and stats endpoints reduce payload sizes by up to 90%.
-- **Smart Data Persistence**: SQLite optimized for SD cards with background writes.
-- **Real-time UX**: Pulsing status indicators and instant dashboard updates.
+- **Daily Reports**: Automatic summarization of solar yield, battery efficiency, and missed potential using Gaussian curve fitting.
+- **High-Performance API**: Slim history and stats endpoints reduce payload sizes by up to 90%, specifically optimized for low-power hardware.
+- **Smart Data Persistence**: SQLite optimized for SD cards with background writes and Write-Ahead Logging (WAL).
+- **Customizable UI**: Reorder, rename, or hide metrics directly from the dashboard settings.
+- **AI Integration**: Built-in tools for connecting solar data to OpenAI and Google Gemini.
+- **Real-time UX**: Pulsing status indicators and instant dashboard updates via WebSockets.
 
 ---
 *This documentation is maintained in the `docs/` folder of the repository.*

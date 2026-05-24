@@ -28,11 +28,14 @@ The system periodically polls various data sources via custom "collectors", stor
 - 🔌 **Modular Collection**: Run any executable script or binary (Python, Bash, etc.) to collect data.
 - 🗄️ **Efficient Storage**: High-performance local SQLite data retention with zero external dependencies.
 - 📊 **Real-time Dashboard**: Built-in web interface with live updates via WebSockets and historical visualization using Chart.js.
-- 📉 **Charts Explorer**: Dedicated page for advanced historical data analysis with multi-metric support and custom time ranges.
+- 📉 **Charts Explorer**: Dedicated page for advanced historical data analysis with multi-metric support and dual-axis visualization.
+- 📋 **Daily Reports**: Comprehensive daily summaries featuring solar yield, battery efficiency, and "Missed Solar Potential" via Gaussian curve fitting.
 - 🧮 **Advanced Virtual Metrics**: Define calculated values using arithmetic formulas with secure and efficient server-side evaluation.
 - ⚡ **Conditional Actions**: Define logic in `.cond` files to automate responses to system events.
+- 🛠️ **Fully Customizable**: Hide, rename, and reorder metrics directly from the UI to tailor the dashboard to your needs.
+- 🤖 **AI Ready**: Integrated tools and examples for connecting your solar data to OpenAI and Google Gemini.
 - 📊 **External Charts API**: Unified endpoint for quick data retrieval by chart type (line/gauge), metric, and time period.
-- 🔌 **Robust API**: REST and WebSocket endpoints for easy access to live and historical data.
+- 🔌 **Robust API**: Comprehensive REST and WebSocket endpoints for easy access to live and historical data.
 - 📲 **Automation Ready**: Integrated Macrodroid webhook support to trigger mobile notifications or logic.
 - 🪶 **Ultra Lightweight**: Specifically optimized for low-power hardware like the Pi Zero 2 W.
 
@@ -49,17 +52,19 @@ The Pi Solar Monitor is engineered for maximum efficiency on the Raspberry Pi Ze
 
 ### Installation
 
+The easiest way to install is using the provided installation script:
+
 ```bash
 # Clone the repository
 git clone https://github.com/nkhearn/Pi-Solar-monitor.git
 cd pi-solar-monitor
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Initialize the database
-python3 init_db.py
+# Run the installer
+chmod +x install.sh
+./install.sh
 ```
+
+The installer will handle dependency installation (supporting virtual environments), database initialization, and systemd service setup.
 
 ### Running
 
