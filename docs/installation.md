@@ -36,6 +36,8 @@ The system typically communicates with Voltronic-compatible inverters via USB.
 
 ## 💻 Phase 2: Software Installation
 
+The easiest way to install the Pi Solar Monitor is using the interactive installation script.
+
 ### 1. Clone the Repository
 
 ```bash
@@ -43,80 +45,46 @@ git clone <repository-url>
 cd pi-solar-monitor
 ```
 
-### 2. Install Python Dependencies
+### 2. Run the Installer
 
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
-
-It is recommended to use a virtual environment or ensure all system dependencies are met.
+The `install.sh` script automates dependency installation, database initialization, and systemd service setup. It also handles PEP 668 (externally managed environments) by offering to create a virtual environment.
 
 ```bash
-pip install -r requirements.txt
+chmod +x install.sh
+./install.sh
 ```
 
-> [!NOTE]
-> For data migration from EmonCMS or for running automated tests, you may need additional packages:
-> - **Migration**: `mysql-connector-python`
-> - **Testing**: `pytest`, `pytest-asyncio`, `httpx`, `playwright`
-
-### 3. Initialize the Database
-
-The system uses **SQLite** to store historical data, optimized for long-term use on SD cards. Run the initialization script to create the necessary tables and enable Write-Ahead Logging (WAL).
-
-```bash
-python3 init_db.py
-```
-
-> [!IMPORTANT]
-> The database stores all historical data indefinitely in `data/inverter_logs.db`. Ensure your SD card has sufficient free space for long-term logging.
+**The installer will:**
+- Verify Python 3.9+ is installed.
+- Install all dependencies from `requirements.txt`.
+- Initialize the SQLite database with optimized settings (WAL mode).
+- Create a `pi-solar.service` and configure it to start on boot.
 
 ---
 
-## 🚀 Phase 3: Running the Monitor
+## 🚀 Phase 3: Post-Installation
 
-### ⏱️ Manual Start
+### ⏱️ Manual Control
 
-To start both the collection engine and the web/API server:
+If you need to manually stop or restart the monitor:
 
 ```bash
-python3 main.py
+# Stop the service
+sudo systemctl stop pi-solar.service
+
+# Start the service
+sudo systemctl start pi-solar.service
+
+# View live logs
+sudo journalctl -u pi-solar.service -f
 ```
 
 The dashboard will be accessible at `http://<your-pi-ip>:8000`.
 
-### ⚡ Background Service (Systemd)
+---
 
-To ensure the monitor starts automatically on boot and restarts on failure, set it up as a systemd service.
+## 📋 Technical Notes
 
-1.  **Create the service file:**
-    ```bash
-    sudo nano /etc/systemd/system/pi-solar.service
-    ```
-
-2.  **Paste the following configuration** (adjust `User` and `WorkingDirectory` as needed):
-    ```ini
-    [Unit]
-    Description=Pi Solar Monitor Service
-    After=network.target
-
-    [Service]
-    User=pi
-    WorkingDirectory=/home/pi/pi-solar-monitor
-    ExecStart=/usr/bin/python3 main.py
-    Restart=always
-    RestartSec=10
-
-    [Install]
-    WantedBy=multi-user.target
-    ```
-
-3.  **Enable and start the service:**
-    ```bash
-    sudo systemctl daemon-reload
-    sudo systemctl enable pi-solar.service
-    sudo systemctl start pi-solar.service
-    ```
-
-4.  **Check status:**
-    ```bash
-    sudo systemctl status pi-solar.service
-    ```
+- **Database**: The system uses **SQLite** located at `data/inverter_logs.db`. It stores all historical data indefinitely.
+- **Environment**: If you used a virtual environment during installation, the systemd service is automatically configured to use the correct Python binary within that environment.
+- **Permissions**: Ensure the user running the service has write access to the project directory and read/write access to `/dev/hidraw0`.
