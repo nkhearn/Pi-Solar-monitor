@@ -57,7 +57,7 @@ def migrate_data_points_json_to_columns(conn):
         sanitized = sanitize_column_name(key)
         if sanitized not in seen_sanitized:
             print(f"Adding column: {sanitized} (from key: {key})")
-            cursor.execute(f"ALTER TABLE data_points ADD COLUMN {sanitized} REAL")
+            cursor.execute(f'ALTER TABLE data_points ADD COLUMN "{sanitized}" REAL')
             cols_to_insert.append(sanitized)
             # Use json_extract with original key.
             safe_key = key.replace("'", "''")
