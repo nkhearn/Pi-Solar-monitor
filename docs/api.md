@@ -174,7 +174,12 @@ Returns a single specific statistic.
 
 - **Success Response**:
   - **Code**: 200
-  - **Content**: `{"value": 51.8}`
+  - **Content**:
+    ```json
+    {
+        "value": 51.8
+    }
+    ```
 
 ---
 
