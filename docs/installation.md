@@ -41,7 +41,7 @@ The easiest way to install the Pi Solar Monitor is using the interactive install
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/nkhearn/Pi-Solar-monitor.git
+git clone <repository-url>
 cd pi-solar-monitor
 ```
 

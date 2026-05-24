@@ -230,24 +230,131 @@ A simplified endpoint for external integrations (e.g., custom widgets).
 ## 🧮 Virtual Metrics
 
 ### `GET` /api/virtual_metrics
-Lists all defined virtual metrics.
+Lists all defined virtual metrics and their arithmetic formulas.
+
+- **Example Request**:
+  `GET /api/virtual_metrics`
+
+- **Success Response**:
+  - **Code**: 200
+  - **Content**:
+    ```json
+    [
+        {"name": "efficiency", "formula": "pv_power / load"},
+        {"name": "total_input", "formula": "pv_power + grid_power"}
+    ]
+    ```
+
+---
 
 ### `POST` /api/virtual_metrics
 Creates or updates a virtual metric.
-- **Body**: `{"name": "efficiency", "formula": "pv_power / load"}`
+
+- **Example Request**:
+  `POST /api/virtual_metrics`
+  **Body**:
+  ```json
+  {
+      "name": "efficiency",
+      "formula": "pv_power / load"
+  }
+  ```
+
+- **Success Response**:
+  - **Code**: 200
+  - **Content**: `{"status": "success"}`
+
+---
 
 ### `DELETE` /api/virtual_metrics/{name}
 Deletes a virtual metric.
+
+- **Example Request**:
+  `DELETE /api/virtual_metrics/efficiency`
+
+- **Success Response**:
+  - **Code**: 200
+  - **Content**: `{"status": "success"}`
 
 ---
 
 ## ⚙️ Configuration Endpoints
 
-### `GET` /api/charts | `POST` /api/charts
-Manages the dashboard chart layout.
+### `GET` /api/charts
+Returns the persistent dashboard chart configuration.
 
-### `GET` /api/metric_configs | `POST` /api/metric_configs
-Manages metric display names, colors, visibility, and ordering.
+- **Success Response**:
+  - **Code**: 200
+  - **Content**:
+    ```json
+    [
+        {
+            "id": "1710712345678",
+            "title": "Solar Power",
+            "metric": "pv_power",
+            "type": "line",
+            "range": "1h"
+        }
+    ]
+    ```
+
+---
+
+### `POST` /api/charts
+Saves the dashboard chart configuration.
+
+- **Example Request**:
+  `POST /api/charts`
+  **Body**:
+  ```json
+  [
+      {
+          "id": "1710712345678",
+          "title": "Solar Power",
+          "metric": "pv_power",
+          "type": "line",
+          "range": "1h"
+      }
+  ]
+  ```
+
+---
+
+### `GET` /api/metric_configs
+Returns customization settings for all metrics.
+
+- **Success Response**:
+  - **Code**: 200
+  - **Content**:
+    ```json
+    {
+        "pv_input_power": {
+            "displayName": "Solar Production",
+            "color": "#f1c40f",
+            "hidden": false,
+            "order": 1
+        }
+    }
+    ```
+
+---
+
+### `POST` /api/metric_configs
+Updates customization settings for one or more metrics.
+
+- **Example Request**:
+  `POST /api/metric_configs`
+  **Body**:
+  ```json
+  {
+      "pv_input_power": {
+          "displayName": "Solar Production",
+          "color": "#f1c40f",
+          "hidden": false,
+          "order": 1
+      }
+  }
+  ```
 
 ---
 
