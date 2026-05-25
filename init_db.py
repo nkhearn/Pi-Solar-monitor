@@ -20,7 +20,7 @@ def sanitize_column_name(name):
 def get_row_count(conn, table_name):
     cursor = conn.cursor()
     try:
-        cursor.execute(f'SELECT COUNT(*) FROM "{table_name}"')
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
         return cursor.fetchone()[0]
     except sqlite3.OperationalError:
         return 0
@@ -50,25 +50,31 @@ def migrate_data_points_json_to_columns(conn):
 
     # 4. Add columns and prepare migration query
     cols_to_insert = []
-    select_exprs = []
+    case_exprs = []
     seen_sanitized = set()
 
     for key in keys:
         sanitized = sanitize_column_name(key)
         if sanitized not in seen_sanitized:
             print(f"Adding column: {sanitized} (from key: {key})")
-            cursor.execute(f'ALTER TABLE data_points ADD COLUMN "{sanitized}" REAL')
+            cursor.execute(f"ALTER TABLE data_points ADD COLUMN {sanitized} REAL")
             cols_to_insert.append(sanitized)
-            # Use json_extract with original key.
+
+            # Escape single quotes for SQL string literal
             safe_key = key.replace("'", "''")
-            select_exprs.append(f"json_extract(data, '$.\"{safe_key}\"')")
+            case_exprs.append(f"MAX(CASE WHEN j.key = '{safe_key}' THEN j.value END) as {sanitized}")
             seen_sanitized.add(sanitized)
 
-    # 5. Insert data
+    # 5. Insert data using Pivot approach via json_each
     if cols_to_insert:
         cols_str = ", ".join(cols_to_insert)
-        select_str = ", ".join(select_exprs)
-        query = f"INSERT INTO data_points (id, timestamp, {cols_str}) SELECT id, timestamp, {select_str} FROM data_points_old"
+        select_str = ", ".join(case_exprs)
+        query = f"""
+            INSERT INTO data_points (id, timestamp, {cols_str})
+            SELECT t.id, t.timestamp, {select_str}
+            FROM data_points_old t, json_each(t.data) j
+            GROUP BY t.id
+        """
         cursor.execute(query)
     else:
         cursor.execute("INSERT INTO data_points (id, timestamp) SELECT id, timestamp FROM data_points_old")
@@ -83,11 +89,10 @@ def backup_database(src, dest):
 
     src_conn = sqlite3.connect(src)
     dest_conn = sqlite3.connect(dest)
-    try:
+    with dest_conn:
         src_conn.backup(dest_conn)
-    finally:
-        dest_conn.close()
-        src_conn.close()
+    dest_conn.close()
+    src_conn.close()
 
 def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
