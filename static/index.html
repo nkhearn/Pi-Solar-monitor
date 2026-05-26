@@ -1180,10 +1180,11 @@
             popover.appendChild(header);
 
             const baseUrl = window.location.origin;
+            const encodedKey = encodeURIComponent(key);
             const links = [
-                { label: 'Current Value', url: `${baseUrl}/api/data/${key}/last` },
-                { label: 'Last Hour Average', url: `${baseUrl}/api/data/${key}/stats/avg?start=1h` },
-                { label: 'Last 24 Hours Average', url: `${baseUrl}/api/data/${key}/stats/avg?start=24h` }
+                { label: 'Current Value', url: `${baseUrl}/api/data/${encodedKey}/last` },
+                { label: 'Last Hour Average', url: `${baseUrl}/api/data/${encodedKey}/stats/avg?start=1h` },
+                { label: 'Last 24 Hours Average', url: `${baseUrl}/api/data/${encodedKey}/stats/avg?start=24h` }
             ];
 
             links.forEach(link => {
