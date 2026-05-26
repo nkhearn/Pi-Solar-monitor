@@ -170,14 +170,30 @@
             color: #888;
             margin-top: 4px;
         }
-        .edit-metric-btn {
+        .edit-metric-btn, .help-metric-btn {
             opacity: 0;
-            transition: opacity 0.2s;
+            transition: opacity 0.2s, background-color 0.2s;
             cursor: pointer;
-            font-size: 1.2em;
+            font-size: 1em;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
         }
-        .card:hover .edit-metric-btn {
+        .help-metric-btn:hover, .edit-metric-btn:hover {
+            background-color: var(--border-color);
+        }
+        .card:hover .edit-metric-btn, .card:hover .help-metric-btn {
             opacity: 1;
+        }
+        .help-metric-btn {
+            border: 1px solid var(--border-color);
+            margin-right: 8px;
+            font-size: 0.8em;
+            font-weight: bold;
+            background: var(--bg-color);
         }
 
         .chart-grid {
@@ -354,6 +370,94 @@
             gap: 10px;
         }
         .vm-item:last-child { border-bottom: none; }
+
+        /* Help Popover */
+        .help-popover {
+            position: absolute;
+            top: 40px;
+            right: 0;
+            width: 300px;
+            max-width: calc(100vw - 40px);
+            background: var(--container-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            z-index: 1000;
+            padding: 15px;
+            font-size: 0.9em;
+            color: var(--text-color);
+        }
+        .help-popover-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px;
+        }
+        .help-popover-title {
+            font-weight: bold;
+            cursor: pointer;
+            word-break: break-all;
+            padding-right: 20px;
+        }
+        .help-popover-close {
+            cursor: pointer;
+            font-size: 1.2em;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        .help-link-group {
+            margin-bottom: 12px;
+        }
+        .help-link-label {
+            font-size: 0.8em;
+            color: var(--card-title);
+            margin-bottom: 4px;
+            display: block;
+        }
+        .help-link-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-color);
+            padding: 6px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+        .help-link-text {
+            flex-grow: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-decoration: none;
+            color: var(--accent-color);
+            font-family: monospace;
+            font-size: 0.85em;
+        }
+        .copy-icon-btn {
+            cursor: pointer;
+            font-size: 1em;
+            flex-shrink: 0;
+            opacity: 0.7;
+        }
+        .copy-icon-btn:hover { opacity: 1; }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            z-index: 2000;
+            transition: opacity 0.3s;
+        }
     </style>
 </head>
 <body>
@@ -675,11 +779,25 @@
                     nameSpan.className = 'metric-name';
                     titleEl.appendChild(nameSpan);
 
+                    const btnGroup = document.createElement('div');
+                    btnGroup.className = 'card-btns';
+                    btnGroup.style.display = 'flex';
+                    btnGroup.style.alignItems = 'center';
+
+                    const helpBtn = document.createElement('span');
+                    helpBtn.className = 'help-metric-btn';
+                    helpBtn.innerHTML = '?';
+                    helpBtn.title = 'API Help';
+                    helpBtn.onclick = (e) => { e.stopPropagation(); toggleHelpPopover(key, card); };
+                    btnGroup.appendChild(helpBtn);
+
                     const editBtn = document.createElement('span');
                     editBtn.className = 'edit-metric-btn';
                     editBtn.innerHTML = '⚙️';
                     editBtn.onclick = (e) => { e.stopPropagation(); openCustomizeMetric(key); };
-                    titleEl.appendChild(editBtn);
+                    btnGroup.appendChild(editBtn);
+
+                    titleEl.appendChild(btnGroup);
 
                     valueDiv = document.createElement('div');
                     valueDiv.className = 'value';
@@ -1007,6 +1125,105 @@
             if (lastPayload) renderMetrics(lastPayload);
             refreshMetricConfigsList();
         };
+
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 2000);
+        }
+
+        function copyToClipboard(text, message = 'Copied to clipboard!') {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast(message);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+
+        function toggleHelpPopover(key, card) {
+            const existing = document.getElementById('active-help-popover');
+            if (existing) {
+                const sameMetric = existing.dataset.metric === key;
+                existing.remove();
+                if (sameMetric) return;
+            }
+
+            const popover = document.createElement('div');
+            popover.className = 'help-popover';
+            popover.id = 'active-help-popover';
+            popover.dataset.metric = key;
+
+            const header = document.createElement('div');
+            header.className = 'help-popover-header';
+
+            const title = document.createElement('div');
+            title.className = 'help-popover-title';
+            title.textContent = key;
+            title.title = 'Click to copy metric key';
+            title.onclick = () => copyToClipboard(key, `Key "${key}" copied!`);
+            header.appendChild(title);
+
+            const closeBtn = document.createElement('span');
+            closeBtn.className = 'help-popover-close';
+            closeBtn.innerHTML = '✖️';
+            closeBtn.onclick = (e) => { e.stopPropagation(); popover.remove(); };
+            header.appendChild(closeBtn);
+
+            popover.appendChild(header);
+
+            const baseUrl = window.location.origin;
+            const links = [
+                { label: 'Current Value', url: `${baseUrl}/api/data/${key}/last` },
+                { label: 'Last Hour Average', url: `${baseUrl}/api/data/${key}/stats/avg?start=1h` },
+                { label: 'Last 24 Hours Average', url: `${baseUrl}/api/data/${key}/stats/avg?start=24h` }
+            ];
+
+            links.forEach(link => {
+                const group = document.createElement('div');
+                group.className = 'help-link-group';
+
+                const label = document.createElement('label');
+                label.className = 'help-link-label';
+                label.textContent = link.label;
+                group.appendChild(label);
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'help-link-wrapper';
+
+                const a = document.createElement('a');
+                a.className = 'help-link-text';
+                a.href = link.url;
+                a.target = '_blank';
+                a.textContent = link.url;
+                wrapper.appendChild(a);
+
+                const copyBtn = document.createElement('span');
+                copyBtn.className = 'copy-icon-btn';
+                copyBtn.innerHTML = '📋';
+                copyBtn.title = 'Copy Link';
+                copyBtn.onclick = (e) => { e.stopPropagation(); copyToClipboard(link.url); };
+                wrapper.appendChild(copyBtn);
+
+                group.appendChild(wrapper);
+                popover.appendChild(group);
+            });
+
+            card.appendChild(popover);
+
+            // Close when clicking outside
+            const closeHandler = (e) => {
+                if (!popover.contains(e.target) && !e.target.classList.contains('help-metric-btn')) {
+                    popover.remove();
+                    document.removeEventListener('mousedown', closeHandler);
+                }
+            };
+            setTimeout(() => document.addEventListener('mousedown', closeHandler), 0);
+        }
 
         async function refreshMetricConfigsList() {
             mcListEl.innerHTML = '';
