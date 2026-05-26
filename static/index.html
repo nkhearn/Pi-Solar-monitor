@@ -1149,6 +1149,9 @@
             const existing = document.getElementById('active-help-popover');
             if (existing) {
                 const sameMetric = existing.dataset.metric === key;
+                if (existing._closeHandler) {
+                    document.removeEventListener('mousedown', existing._closeHandler);
+                }
                 existing.remove();
                 if (sameMetric) return;
             }
