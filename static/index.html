@@ -1138,20 +1138,39 @@
         }
 
         function copyToClipboard(text, message = 'Copied to clipboard!') {
-            navigator.clipboard.writeText(text).then(() => {
-                showToast(message);
-            }).catch(err => {
-                console.error('Failed to copy: ', err);
-            });
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast(message);
+                }).catch(err => {
+                    fallbackCopyTextToClipboard(text, message);
+                });
+            } else {
+                fallbackCopyTextToClipboard(text, message);
+            }
+        }
+
+        function fallbackCopyTextToClipboard(text, message) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            textArea.style.top = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) showToast(message);
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+            }
+            document.body.removeChild(textArea);
         }
 
         function toggleHelpPopover(key, card) {
             const existing = document.getElementById('active-help-popover');
             if (existing) {
                 const sameMetric = existing.dataset.metric === key;
-                if (existing._closeHandler) {
-                    document.removeEventListener('mousedown', existing._closeHandler);
-                }
                 existing.remove();
                 if (sameMetric) return;
             }
@@ -1180,11 +1199,10 @@
             popover.appendChild(header);
 
             const baseUrl = window.location.origin;
-            const encodedKey = encodeURIComponent(key);
             const links = [
-                { label: 'Current Value', url: `${baseUrl}/api/data/${encodedKey}/last` },
-                { label: 'Last Hour Average', url: `${baseUrl}/api/data/${encodedKey}/stats/avg?start=1h` },
-                { label: 'Last 24 Hours Average', url: `${baseUrl}/api/data/${encodedKey}/stats/avg?start=24h` }
+                { label: 'Current Value', url: `${baseUrl}/api/data/${key}/last` },
+                { label: 'Last Hour Average', url: `${baseUrl}/api/data/${key}/stats/avg?start=1h` },
+                { label: 'Last 24 Hours Average', url: `${baseUrl}/api/data/${key}/stats/avg?start=24h` }
             ];
 
             links.forEach(link => {
