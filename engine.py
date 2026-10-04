@@ -21,6 +21,88 @@ MACRODROID_URL = os.getenv("MACRODROID_URL")
 
 logger = logging.getLogger(__name__)
 
+# Set of manual collector filepaths queued for execution in the next collection cycle
+_manual_trigger_queue = set()
+_manual_trigger_lock = asyncio.Lock()
+
+# Persistent cache mapping collector filepath -> list of produced keys
+_collector_key_cache = {}
+
+async def queue_manual_trigger(filepath_or_name):
+    """
+    Queues a collector script for manual execution during the next minutely collection cycle.
+    """
+    async with _manual_trigger_lock:
+        _manual_trigger_queue.add(filepath_or_name)
+
+def extract_keys_from_script_static(filepath):
+    """
+    Statically analyzes script file content (via regex) for string keys in JSON return/output dicts
+    without executing the script.
+    """
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        # Find string keys inside dictionary literals or json return dicts like "key": or 'key':
+        found_keys = re.findall(r'[\'"]([a-zA-Z0-9_]+)[\'"]\s*:', content)
+        # Exclude common non-metric dictionary keys
+        excluded = {'latitude', 'longitude', 'hourly', 'tilt', 'azimuth', 'forecast_days', 'timeout', 'Content-Type'}
+        return [k for k in sorted(list(set(found_keys))) if k not in excluded]
+    except Exception:
+        return []
+
+def get_collector_info_map():
+    """
+    Scans collectors/ directories without executing scripts synchronously and returns:
+    - collectors: list of {filepath, dir_name, filename, minutely, keys}
+    - non_minutely_keys: list of keys produced by non-minutely collectors
+    - metric_to_collector: dict mapping metric_key -> list of collector filepaths
+    """
+    collectors = []
+    non_minutely_keys = set()
+    metric_to_collector = {}
+
+    subdirs = [
+        (COLLECTORS_DIR, 'collectors', True),
+        (os.path.join(COLLECTORS_DIR, "minutely"), 'minutely', True),
+        (os.path.join(COLLECTORS_DIR, "hourly"), 'hourly', False),
+        (os.path.join(COLLECTORS_DIR, "daily"), 'daily', False)
+    ]
+
+    for dir_path, dir_name, is_minutely in subdirs:
+        if not os.path.exists(dir_path):
+            continue
+        for filename in sorted(os.listdir(dir_path)):
+            filepath = os.path.join(dir_path, filename)
+            if os.path.isfile(filepath) and os.access(filepath, os.X_OK):
+                # Retrieve keys from cache if available from actual runs; otherwise static extraction
+                if filepath in _collector_key_cache:
+                    keys = _collector_key_cache[filepath]
+                else:
+                    keys = extract_keys_from_script_static(filepath)
+
+                collectors.append({
+                    "filepath": filepath,
+                    "filename": filename,
+                    "directory": dir_name,
+                    "is_minutely": is_minutely,
+                    "keys": keys
+                })
+
+                if not is_minutely:
+                    for k in keys:
+                        non_minutely_keys.add(k)
+                        if k not in metric_to_collector:
+                            metric_to_collector[k] = []
+                        if filepath not in metric_to_collector[k]:
+                            metric_to_collector[k].append(filepath)
+
+    return {
+        "collectors": collectors,
+        "non_minutely_keys": sorted(list(non_minutely_keys)),
+        "metric_to_collector": metric_to_collector
+    }
+
 def sanitize_column_name(name):
     """
     Sanitizes a name for use as a SQL column name.
@@ -90,6 +172,10 @@ async def run_collector(filepath, timeout=55, directory_name=None):
                         else:
                             logger.debug(f"Collector {filepath} output: {raw_output}")
 
+                    # Cache collector output keys dynamically from actual runs
+                    if isinstance(data, dict):
+                        _collector_key_cache[filepath] = list(data.keys())
+
                     return data
                 except json.JSONDecodeError:
                     logger.error(f"Error: Collector {filepath} returned invalid JSON: {raw_output}")
@@ -111,11 +197,14 @@ async def run_collector(filepath, timeout=55, directory_name=None):
         logger.error(f"Error running collector {filepath}: {e}")
         return None
 
-def should_run_collector(filename, current_time, directory_name):
+def should_run_collector(filename, current_time, directory_name, is_manually_triggered=False):
     """
-    Determines if a collector should run based on its filename and current time.
+    Determines if a collector should run based on its filename, current time, or manual trigger override.
     Returns (bool, reason)
     """
+    if is_manually_triggered:
+        return True, "Manually triggered"
+
     name_parts = filename.split('.')
 
     if directory_name == 'hourly':
@@ -142,12 +231,15 @@ def should_run_collector(filename, current_time, directory_name):
 
     return True, None
 
-async def collect_from_dirs(directories, timeout=55, current_time=None):
+async def collect_from_dirs(directories, timeout=55, current_time=None, manual_triggers=None):
     """
     Iterates through specified directories and aggregates data from executables.
     """
     if current_time is None:
         current_time = datetime.now()
+
+    if manual_triggers is None:
+        manual_triggers = set()
 
     aggregated_data = {}
     tasks = []
@@ -162,10 +254,11 @@ async def collect_from_dirs(directories, timeout=55, current_time=None):
         for filename in sorted(os.listdir(directory)):
             filepath = os.path.join(directory, filename)
             if os.path.isfile(filepath):
-                should_run, reason = should_run_collector(filename, current_time, dir_name)
+                is_manual = (filepath in manual_triggers) or (filename in manual_triggers)
+                should_run, reason = should_run_collector(filename, current_time, dir_name, is_manually_triggered=is_manual)
                 if should_run:
                     if os.access(filepath, os.X_OK):
-                        logger.info(f"Running collector: {filepath}")
+                        logger.info(f"Running collector: {filepath}{' (manual trigger)' if is_manual else ''}")
                         tasks.append(run_collector(filepath, timeout, directory_name=dir_name))
                     else:
                         logger.error(f"Collector skipped: {filepath} (Reason: Not executable)")
@@ -182,16 +275,21 @@ async def collect_from_dirs(directories, timeout=55, current_time=None):
 
 async def collect_all(current_time=None):
     """
-    Aggregates data from all relevant collector directories based on the schedule.
+    Aggregates data from all relevant collector directories based on the schedule or manual triggers.
     """
     if current_time is None:
         current_time = datetime.now()
 
+    global _manual_trigger_queue
+    async with _manual_trigger_lock:
+        manual_triggers = set(_manual_trigger_queue)
+        _manual_trigger_queue.clear()
+
     dirs_55s = [COLLECTORS_DIR, os.path.join(COLLECTORS_DIR, "minutely")]
     dirs_300s = [os.path.join(COLLECTORS_DIR, "hourly"), os.path.join(COLLECTORS_DIR, "daily")]
 
-    tasks = [collect_from_dirs(dirs_55s, timeout=55, current_time=current_time)]
-    tasks.append(collect_from_dirs(dirs_300s, timeout=300, current_time=current_time))
+    tasks = [collect_from_dirs(dirs_55s, timeout=55, current_time=current_time, manual_triggers=manual_triggers)]
+    tasks.append(collect_from_dirs(dirs_300s, timeout=300, current_time=current_time, manual_triggers=manual_triggers))
 
     results = await asyncio.gather(*tasks)
 

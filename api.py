@@ -12,6 +12,7 @@ import re
 import ast
 import traceback
 from daily_report import generate_report_data
+import engine
 
 DB_PATH = "data/inverter_logs.db"
 
@@ -514,6 +515,46 @@ async def get_history(start: Optional[str] = Query(None), end: Optional[str] = Q
         results.append({"timestamp": timestamp, "data": data})
 
     return results
+
+@app.get("/api/collectors")
+async def get_collectors_info():
+    """
+    Returns information about collectors and non-minutely metrics.
+    """
+    info = await asyncio.to_thread(engine.get_collector_info_map)
+    return info
+
+@app.post("/api/collectors/trigger")
+async def trigger_collector(collector: Optional[str] = Body(None, embed=True), metric: Optional[str] = Body(None, embed=True)):
+    """
+    Triggers a non-minutely collector to run at the next minutely collection interval.
+    Accepts either `collector` (filepath or filename) or `metric` key name.
+    """
+    info = await asyncio.to_thread(engine.get_collector_info_map)
+
+    target_collectors = []
+    if collector:
+        target_collectors.append(collector)
+    elif metric:
+        sanitized_metric = sanitize_column_name(metric)
+        # Check mapping
+        if metric in info["metric_to_collector"]:
+            target_collectors.extend(info["metric_to_collector"][metric])
+        elif sanitized_metric in info["metric_to_collector"]:
+            target_collectors.extend(info["metric_to_collector"][sanitized_metric])
+        else:
+            # Fallback search if metric key wasn't mapped directly
+            for c in info["collectors"]:
+                if metric in c["keys"] or sanitized_metric in c["keys"]:
+                    target_collectors.append(c["filepath"])
+
+    if not target_collectors:
+        raise HTTPException(status_code=404, detail="No collector found for the specified parameter.")
+
+    for c_path in target_collectors:
+        await engine.queue_manual_trigger(c_path)
+
+    return {"status": "success", "message": f"Collector(s) queued for next collection: {', '.join(target_collectors)}"}
 
 @app.get("/api/virtual_metrics")
 async def get_virtual_metrics():
