@@ -170,7 +170,7 @@
             color: #888;
             margin-top: 4px;
         }
-        .edit-metric-btn, .help-metric-btn {
+        .edit-metric-btn, .help-metric-btn, .trigger-metric-btn {
             opacity: 0;
             transition: opacity 0.2s, background-color 0.2s;
             cursor: pointer;
@@ -182,10 +182,10 @@
             height: 24px;
             border-radius: 50%;
         }
-        .help-metric-btn:hover, .edit-metric-btn:hover {
+        .help-metric-btn:hover, .edit-metric-btn:hover, .trigger-metric-btn:hover {
             background-color: var(--border-color);
         }
-        .card:hover .edit-metric-btn, .card:hover .help-metric-btn {
+        .card:hover .edit-metric-btn, .card:hover .help-metric-btn, .card:hover .trigger-metric-btn {
             opacity: 1;
         }
         .help-metric-btn {
@@ -194,6 +194,10 @@
             font-size: 0.8em;
             font-weight: bold;
             background: var(--bg-color);
+        }
+        .trigger-metric-btn {
+            margin-right: 4px;
+            font-size: 0.9em;
         }
 
         .chart-grid {
@@ -622,6 +626,7 @@
         let lastPayload = null;
         let virtualMetrics = [];
         let metricConfigs = {};
+        let nonMinutelyKeys = new Set();
 
         function parseBackendTimestamp(ts) {
             if (!ts) return null;
@@ -791,6 +796,13 @@
                     helpBtn.onclick = (e) => { e.stopPropagation(); toggleHelpPopover(key, card); };
                     btnGroup.appendChild(helpBtn);
 
+                    const triggerBtn = document.createElement('span');
+                    triggerBtn.className = 'trigger-metric-btn' + (nonMinutelyKeys.has(key) ? '' : ' hidden');
+                    triggerBtn.innerHTML = '🏃';
+                    triggerBtn.title = 'Trigger collection at next minute';
+                    triggerBtn.onclick = (e) => { e.stopPropagation(); triggerCollectorRun(key); };
+                    btnGroup.appendChild(triggerBtn);
+
                     const editBtn = document.createElement('span');
                     editBtn.className = 'edit-metric-btn';
                     editBtn.innerHTML = '⚙️';
@@ -825,6 +837,11 @@
                 nameSpan.textContent = config.displayName || key.replace(/_/g, ' ');
                 card.style.borderTop = `4px solid ${config.color || 'transparent'}`;
                 card.classList.toggle('hidden', !!config.hidden);
+
+                const triggerBtn = card.querySelector('.trigger-metric-btn');
+                if (triggerBtn) {
+                    triggerBtn.classList.toggle('hidden', !nonMinutelyKeys.has(key));
+                }
 
                 const displayValue = typeof data[key] === 'number' ? data[key].toFixed(2).replace(/\.00$/, '') : data[key];
                 if (valueDiv.childNodes[0].textContent !== displayValue) {
@@ -1337,7 +1354,39 @@
             }
         };
 
+        async function fetchCollectorsInfo() {
+            try {
+                const res = await fetch('/api/collectors');
+                if (res.ok) {
+                    const info = await res.json();
+                    nonMinutelyKeys = new Set(info.non_minutely_keys || []);
+                }
+            } catch (err) {
+                console.error("Error fetching collectors info:", err);
+            }
+        }
+
+        async function triggerCollectorRun(key) {
+            try {
+                const res = await fetch('/api/collectors/trigger', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ metric: key })
+                });
+                if (res.ok) {
+                    showToast('Collector queued for next run!');
+                } else {
+                    const data = await res.json();
+                    showToast('Trigger failed: ' + (data.detail || 'Error'));
+                }
+            } catch (err) {
+                showToast('Error triggering collector');
+            }
+        }
+
         async function init() {
+            await fetchCollectorsInfo();
+
             const resConfigs = await fetch('/api/metric_configs');
             metricConfigs = await resConfigs.json();
 
